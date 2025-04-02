@@ -551,3 +551,18 @@ window.addEventListener("resize", () => {
 
 // Initial load
 loadProfile();
+
+// Disable right-click
+document.addEventListener("contextmenu", e => {
+  if (!["INPUT", "TEXTAREA"].includes(e.target.tagName)) {
+    e.preventDefault();
+  }
+});
+
+// Disable Ctrl+C and Ctrl+V except in inputs
+document.addEventListener("keydown", e => {
+  const isInput = ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName);
+  if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "v")) {
+    if (!isInput) e.preventDefault();
+  }
+});
