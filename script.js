@@ -120,7 +120,7 @@ setTimeout(type, 1000);
 
 // Social platforms with official logos
 const socialPlatforms = [
-  { label: "Custom", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/globe.svg", value: "custom" },
+  { label: "Custom", icon: "https://cdn.jsdelivr.net/npm/bootstrap-icons/icons/globe.svg", value: "custom" },
   { label: "Twitter", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/twitter.svg", value: "twitter" },
   { label: "Instagram", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/instagram.svg", value: "instagram" },
   { label: "YouTube", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/youtube.svg", value: "youtube" },
@@ -133,7 +133,7 @@ const defaultProfile = {
   name: "@yourname",
   bio: "My socials:",
   links: [
-    { label: "My Website", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/globe.svg", url: "https://example.com", platform: "custom" },
+    { label: "My Website", icon: "https://cdn.jsdelivr.net/npm/bootstrap-icons/icons/globe.svg", url: "https://example.com", platform: "custom" },
     { label: "Twitter", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/twitter.svg", url: "https://twitter.com", platform: "twitter" },
     { label: "Instagram", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/instagram.svg", url: "https://instagram.com", platform: "instagram" },
     { label: "YouTube", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/youtube.svg", url: "https://youtube.com", platform: "youtube" }
@@ -385,7 +385,7 @@ linkColor.addEventListener("input", updatePreview);
 
 // Add new link
 addLinkBtn.addEventListener("click", () => {
-  currentLinks.push({ label: "New Link", url: "https://example.com", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/globe.svg", platform: "custom" });
+  currentLinks.push({ label: "New Link", url: "https://example.com", icon: "https://cdn.jsdelivr.net/npm/bootstrap-icons/icons/globe.svg", platform: "custom" });
   renderLinkEditor();
   updatePreview();
 });
