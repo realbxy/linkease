@@ -11,6 +11,9 @@
   --input-border: #ccc;
   --input-bg: #f9f9f9;
   --accent-color: #6200ea;
+  --cursor-core-color: #ffffff; /* Bright white core */
+  --cursor-glow-color: #d8c6ff; /* Slightly more vibrant purple-blue glow */
+  --cursor-outer-glow: #b0a2ff;
 }
 
 body {
@@ -28,40 +31,14 @@ body {
   cursor: none;
 }
 
-.custom-cursor {
-  position: fixed;
-  width: 10px;
-  height: 10px;
-  background: #ff00ff;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 10000;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 20px #ff00ff, 0 0 40px #ff00ff, 0 0 60px #ff00ff;
-  mix-blend-mode: screen;
-}
-
-.cursor-trail-container {
+#cursor-canvas {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
+  width: 100vw;
+  height: 100vh;
   z-index: 9998;
-}
-
-.cursor-trail {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  background: #ff00ff;
-  border-radius: 50%;
   pointer-events: none;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff;
-  transition: transform 0.2s ease;
-  opacity: 0.6;
 }
 
 .loader {
