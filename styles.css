@@ -47,14 +47,15 @@ body {
 
 .custom-cursor {
   position: fixed;
-  width: 12px;
-  height: 12px;
-  background: radial-gradient(circle, rgba(98, 0, 234, 0.8) 20%, rgba(98, 0, 234, 0.2) 80%);
+  width: 10px;
+  height: 10px;
+  background: #ff00ff;
   border-radius: 50%;
   pointer-events: none;
-  z-index: 9999;
+  z-index: 10000;
   transform: translate(-50%, -50%);
-  box-shadow: 0 0 10px rgba(98, 0, 234, 0.5);
+  box-shadow: 0 0 20px #ff00ff, 0 0 40px #ff00ff, 0 0 60px #ff00ff;
+  mix-blend-mode: screen;
 }
 
 .cursor-trail-container {
@@ -69,13 +70,15 @@ body {
 
 .cursor-trail {
   position: absolute;
-  width: 8px;
-  height: 8px;
-  background: rgba(98, 0, 234, 0.4);
+  width: 6px;
+  height: 6px;
+  background: #ff00ff;
   border-radius: 50%;
   pointer-events: none;
   transform: translate(-50%, -50%);
-  transition: all 0.3s ease;
+  box-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff;
+  transition: transform 0.2s ease;
+  opacity: 0.6;
 }
 
 .loader {
