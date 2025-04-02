@@ -434,33 +434,43 @@ document.querySelectorAll(".discard-tab-btn").forEach(button => {
 // Animated cursor with trail
 const cursor = document.querySelector(".custom-cursor");
 const trailContainer = document.querySelector(".cursor-trail-container");
-const trails = [];
-const trailLength = 10;
+const trailDots = [];
+const trailLength = 20;
 
 for (let i = 0; i < trailLength; i++) {
-  const trail = document.createElement("div");
-  trail.classList.add("cursor-trail");
-  trailContainer.appendChild(trail);
-  trails.push({ element: trail, x: 0, y: 0, opacity: 1 - (i / trailLength) });
+  const dot = document.createElement("div");
+  dot.classList.add("cursor-trail");
+  trailContainer.appendChild(dot);
+  trailDots.push({ el: dot, x: 0, y: 0 });
 }
 
+let mouseX = window.innerWidth / 2;
+let mouseY = window.innerHeight / 2;
+
 document.addEventListener("mousemove", (e) => {
-  const x = e.clientX;
-  const y = e.clientY;
-
-  cursor.style.left = x + "px";
-  cursor.style.top = y + "px";
-
-  trails.forEach((trail, index) => {
-    const prevTrail = index === 0 ? { x, y } : trails[index - 1];
-    const speed = 0.2 * (index + 1);
-    trail.x += (prevTrail.x - trail.x) * speed;
-    trail.y += (prevTrail.y - trail.y) * speed;
-    trail.element.style.left = trail.x + "px";
-    trail.element.style.top = trail.y + "px";
-    trail.element.style.opacity = trail.opacity;
-  });
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+  cursor.style.left = `${mouseX}px`;
+  cursor.style.top = `${mouseY}px`;
 });
+
+function animateTrail() {
+  let x = mouseX;
+  let y = mouseY;
+
+  trailDots.forEach((dot, index) => {
+    const next = trailDots[index + 1] || { x, y };
+    dot.x += (next.x - dot.x) * 0.3;
+    dot.y += (next.y - dot.y) * 0.3;
+    dot.el.style.left = `${dot.x}px`;
+    dot.el.style.top = `${dot.y}px`;
+  });
+
+  requestAnimationFrame(animateTrail);
+}
+
+animateTrail();
+
 
 // Background particle animation with connections
 const canvas = document.getElementById("backgroundCanvas");
