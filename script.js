@@ -1,4 +1,3 @@
-const themeToggle = document.getElementById("themeToggle");
 const editToggle = document.getElementById("editToggle");
 const profilePic = document.getElementById("profilePic");
 const profilePicUpload = document.getElementById("profilePicUpload");
@@ -10,10 +9,6 @@ const bioCharCount = document.getElementById("bioCharCount");
 const linksEditor = document.getElementById("linksEditor");
 const addLinkBtn = document.getElementById("addLinkBtn");
 const linksContainer = document.getElementById("linksContainer");
-const shareBtn = document.getElementById("shareBtn");
-const shareTwitter = document.getElementById("shareTwitter");
-const shareInstagram = document.getElementById("shareInstagram");
-const shareFacebook = document.getElementById("shareFacebook");
 const followBtn = document.getElementById("followBtn");
 const followerCount = document.getElementById("followerCount");
 const typewriter = document.getElementById("typewriter");
@@ -29,46 +24,6 @@ const previewBio = document.getElementById("previewBio");
 const previewLinks = document.getElementById("previewLinks");
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabContents = document.querySelectorAll(".tab-content");
-
-// Theme initialization
-if (
-  localStorage.getItem("theme") === "dark" ||
-  (!localStorage.getItem("theme") &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches)
-) {
-  document.documentElement.setAttribute("data-theme", "dark");
-}
-
-themeToggle.addEventListener("click", () => {
-  const current = document.documentElement.getAttribute("data-theme");
-  const next = current === "light" ? "dark" : "light";
-  document.documentElement.setAttribute("data-theme", next);
-  localStorage.setItem("theme", next);
-  updateLinkColors();
-  updateParticleColors();
-});
-
-// Share functionality
-const shareUrl = window.location.href;
-shareBtn.addEventListener("click", () => {
-  navigator.clipboard.writeText(shareUrl).then(() => {
-    shareBtn.innerText = "✅ Copied!";
-    setTimeout(() => (shareBtn.innerText = "📎 Copy Link"), 2000);
-  });
-});
-
-shareTwitter.addEventListener("click", () => {
-  window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=Check out my Linkhub!`, "_blank");
-});
-
-shareInstagram.addEventListener("click", () => {
-  alert("Copy the link and share it on Instagram!");
-  navigator.clipboard.writeText(shareUrl);
-});
-
-shareFacebook.addEventListener("click", () => {
-  window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`, "_blank");
-});
 
 // Follow button functionality
 let followers = parseInt(localStorage.getItem("followers") || "0");
@@ -139,22 +94,11 @@ const defaultProfile = {
     { label: "YouTube", icon: "https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/youtube.svg", url: "https://youtube.com", platform: "youtube" }
   ],
   bgColor: "#f5f5f5",
-  linkColor: null
+  linkColor: "#000000"
 };
 
 let currentLinks = [];
 let originalProfile = JSON.parse(JSON.stringify(defaultProfile));
-
-// Update link colors based on theme if not manually set
-function updateLinkColors() {
-  if (!originalProfile.linkColor) {
-    const theme = document.documentElement.getAttribute("data-theme");
-    const defaultLinkColor = theme === "light" ? "#000000" : "#ffffff";
-    document.documentElement.style.setProperty("--link-bg", defaultLinkColor);
-  } else {
-    document.documentElement.style.setProperty("--link-bg", originalProfile.linkColor);
-  }
-}
 
 // Profile picture upload
 profilePic.addEventListener("click", () => {
@@ -328,13 +272,7 @@ function updatePreview() {
   previewBio.textContent = editBio.value || defaultProfile.bio;
   renderLinks(currentLinks, previewLinks);
   document.documentElement.style.setProperty("--bg-color", bgColor.value);
-  if (linkColor.value === "#000000" && document.documentElement.getAttribute("data-theme") === "dark") {
-    document.documentElement.style.setProperty("--link-bg", "#ffffff");
-  } else if (linkColor.value === "#ffffff" && document.documentElement.getAttribute("data-theme") === "light") {
-    document.documentElement.style.setProperty("--link-bg", "#000000");
-  } else {
-    document.documentElement.style.setProperty("--link-bg", linkColor.value);
-  }
+  document.documentElement.style.setProperty("--link-bg", linkColor.value);
 }
 
 // Load profile data
@@ -348,9 +286,9 @@ function loadProfile() {
   editBio.value = data.bio;
   currentLinks = data.links;
   bgColor.value = data.bgColor;
-  linkColor.value = data.linkColor || (document.documentElement.getAttribute("data-theme") === "light" ? "#000000" : "#ffffff");
+  linkColor.value = data.linkColor;
   document.documentElement.style.setProperty("--bg-color", data.bgColor);
-  document.documentElement.style.setProperty("--link-bg", data.linkColor || (document.documentElement.getAttribute("data-theme") === "light" ? "#000000" : "#ffffff"));
+  document.documentElement.style.setProperty("--link-bg", data.linkColor);
   renderLinks(data.links, linksContainer);
   renderLinkEditor();
   updatePreview();
@@ -368,7 +306,7 @@ function resetToOriginal() {
   editBio.value = data.bio;
   currentLinks = data.links;
   bgColor.value = data.bgColor;
-  linkColor.value = data.linkColor || (document.documentElement.getAttribute("data-theme") === "light" ? "#000000" : "#ffffff");
+  linkColor.value = data.linkColor;
   renderLinkEditor();
   updatePreview();
   bioCharCount.textContent = `${editBio.value.length}/80`;
@@ -411,7 +349,7 @@ document.querySelectorAll(".save-tab-btn").forEach(button => {
         bio: editBio.value || defaultProfile.bio,
         links: currentLinks,
         bgColor: bgColor.value,
-        linkColor: linkColor.value === (document.documentElement.getAttribute("data-theme") === "light" ? "#000000" : "#ffffff") ? null : linkColor.value
+        linkColor: linkColor.value
       };
 
       localStorage.setItem("profileData", JSON.stringify(updated));
@@ -470,94 +408,6 @@ function animateTrail() {
 }
 
 animateTrail();
-
-
-// Background particle animation with connections
-const canvas = document.getElementById("backgroundCanvas");
-const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
-const particles = [];
-const particleCount = 50;
-
-class Particle {
-  constructor() {
-    this.x = Math.random() * canvas.width;
-    this.y = Math.random() * canvas.height;
-    this.size = Math.random() * 5 + 1;
-    this.speedX = Math.random() * 1 - 0.5;
-    this.speedY = Math.random() * 1 - 0.5;
-    this.hue = Math.random() * 60 + 240; // Base hue around purple-blue
-  }
-
-  update() {
-    this.x += this.speedX;
-    this.y += this.speedY;
-
-    if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
-    if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
-
-    this.hue += 0.5;
-    if (this.hue > 360) this.hue -= 360;
-  }
-
-  draw() {
-    const theme = document.documentElement.getAttribute("data-theme");
-    const brightness = theme === "light" ? 0.8 : 0.4;
-    ctx.fillStyle = `hsla(${this.hue}, 70%, ${brightness * 100}%, 0.8)`;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-for (let i = 0; i < particleCount; i++) {
-  particles.push(new Particle());
-}
-
-function connectParticles() {
-  for (let i = 0; i < particles.length; i++) {
-    for (let j = i + 1; j < particles.length; j++) {
-      const dx = particles[i].x - particles[j].x;
-      const dy = particles[i].y - particles[j].y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance < 100) {
-        const theme = document.documentElement.getAttribute("data-theme");
-        const brightness = theme === "light" ? 0.5 : 0.2;
-        const opacity = 1 - distance / 100;
-        ctx.strokeStyle = `hsla(${particles[i].hue}, 70%, ${brightness * 100}%, ${opacity})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(particles[i].x, particles[i].y);
-        ctx.lineTo(particles[j].x, particles[j].y);
-        ctx.stroke();
-      }
-    }
-  }
-}
-
-function updateParticleColors() {
-  particles.forEach(particle => {
-    particle.draw();
-  });
-}
-
-function animateParticles() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  particles.forEach(particle => {
-    particle.update();
-    particle.draw();
-  });
-  connectParticles();
-  requestAnimationFrame(animateParticles);
-}
-
-animateParticles();
-window.addEventListener("resize", () => {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-});
 
 // Initial load
 loadProfile();
