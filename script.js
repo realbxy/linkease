@@ -369,45 +369,226 @@ document.querySelectorAll(".discard-tab-btn").forEach(button => {
   });
 });
 
-// Animated cursor with trail
-const cursor = document.querySelector(".custom-cursor");
-const trailContainer = document.querySelector(".cursor-trail-container");
-const trailDots = [];
-const trailLength = 20;
+// Animated cursor 
+const canvas = document.getElementById("cursor-canvas");
+const ctx = canvas.getContext("2d");
 
-for (let i = 0; i < trailLength; i++) {
-  const dot = document.createElement("div");
-  dot.classList.add("cursor-trail");
-  trailContainer.appendChild(dot);
-  trailDots.push({ el: dot, x: 0, y: 0 });
-}
+let width = window.innerWidth;
+let height = window.innerHeight;
+canvas.width = width;
+canvas.height = height;
 
-let mouseX = window.innerWidth / 2;
-let mouseY = window.innerHeight / 2;
+const trail = [];
+const trailLimit = 70; /* Slightly longer trail for better visibility */
+const rippleGroups = []; /* Array to store groups of ripples */
+const maxRippleGroups = 8; /* Reduced limit for active ripple groups */
+let mouseX = width / 2;
+let mouseY = height / 2;
+let hasMoved = false;
+let time = 0; /* For shimmer and rainbow effect */
+let lastClickTime = 0; /* For throttling clicks */
+const clickThrottle = 150; /* Increased throttle time to 150ms */
 
+// Track mouse movement
 document.addEventListener("mousemove", (e) => {
+  hasMoved = true;
   mouseX = e.clientX;
   mouseY = e.clientY;
-  cursor.style.left = `${mouseX}px`;
-  cursor.style.top = `${mouseY}px`;
 });
 
-function animateTrail() {
-  let x = mouseX;
-  let y = mouseY;
+// Track mouse clicks for ripple effect with throttling
+document.addEventListener("click", (e) => {
+  const currentTime = Date.now();
+  if (currentTime - lastClickTime < clickThrottle) return; /* Throttle clicks */
+  lastClickTime = currentTime;
 
-  trailDots.forEach((dot, index) => {
-    const next = trailDots[index + 1] || { x, y };
-    dot.x += (next.x - dot.x) * 0.3;
-    dot.y += (next.y - dot.y) * 0.3;
-    dot.el.style.left = `${dot.x}px`;
-    dot.el.style.top = `${dot.y}px`;
-  });
+  // Limit the number of ripple groups
+  if (rippleGroups.length >= maxRippleGroups) {
+    rippleGroups.shift(); /* Remove the oldest group */
+  }
 
-  requestAnimationFrame(animateTrail);
+  const rippleGroup = [];
+  const baseHue = (time % 360) / 360; /* Start with the current hue */
+  // Create two ripple layers with slight delays
+  for (let i = 0; i < 2; i++) {
+    rippleGroup.push({
+      x: e.clientX,
+      y: e.clientY,
+      radius: 0,
+      opacity: 1,
+      hue: (baseHue + i * 0.1) % 1, /* Slightly different hues for each layer */
+      delay: i * 5, /* Reduced delay for faster cascade */
+      frame: 0 /* Track frames for delay */
+    });
+  }
+  rippleGroups.push(rippleGroup);
+});
+
+// Resize support
+window.addEventListener("resize", () => {
+  width = window.innerWidth;
+  height = window.innerHeight;
+  canvas.width = width;
+  canvas.height = height;
+});
+
+function hslToRgb(h, s, l) {
+  let r, g, b;
+  if (s === 0) {
+    r = g = b = l; // Achromatic
+  } else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+  return `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
 }
 
-animateTrail();
+function animate() {
+  time += 0.05; /* Increment for shimmer and rainbow effect */
+
+  const last = trail.length ? trail[trail.length - 1] : { x: mouseX, y: mouseY };
+  const smoothX = last.x + (mouseX - last.x) * 0.2;
+  const smoothY = last.y + (mouseY - last.y) * 0.2;
+
+  trail.push({ x: smoothX, y: smoothY });
+  if (trail.length > trailLimit) trail.shift();
+
+  ctx.clearRect(0, 0, width, height);
+
+  const coreColor = getComputedStyle(document.documentElement)
+    .getPropertyValue('--cursor-core-color').trim();
+
+  // Calculate rainbow colors for the trail
+  const hue = (time % 360) / 360;
+  const glowColor = hslToRgb(hue, 0.8, 0.6);
+  const outerGlowColor = hslToRgb(hue, 0.9, 0.5);
+
+  // Draw ripples
+  for (let i = rippleGroups.length - 1; i >= 0; i--) {
+    const group = rippleGroups[i];
+    let allFaded = true;
+
+    for (let j = group.length - 1; j >= 0; j--) {
+      const ripple = group[j];
+      ripple.frame++;
+
+      if (ripple.frame < ripple.delay) continue; /* Apply delay */
+
+      ripple.radius += 0.8; /* Slower expansion for smaller ripples */
+      ripple.opacity -= 0.015; /* Faster fade-out to reduce active ripples */
+      ripple.hue = (ripple.hue + 0.003) % 1; /* Slower hue cycle for smoother transition */
+
+      if (ripple.opacity <= 0) {
+        group.splice(j, 1);
+        continue;
+      }
+
+      allFaded = false;
+
+      const shimmer = 1 + 0.15 * Math.sin(time + j); /* Enhanced shimmer effect */
+      const rippleColor = hslToRgb(ripple.hue, 0.9, 0.5);
+
+      ctx.beginPath();
+      ctx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = rippleColor;
+      ctx.globalAlpha = ripple.opacity;
+      ctx.shadowColor = rippleColor;
+      ctx.shadowBlur = 30 * shimmer; /* Reduced glow for performance */
+      ctx.lineWidth = 8 - j * 2; /* Smaller thickness: 8, 6 */
+      ctx.stroke();
+    }
+
+    if (allFaded) {
+      rippleGroups.splice(i, 1); /* Remove empty groups */
+    }
+  }
+  ctx.globalAlpha = 1; /* Reset alpha for trail */
+
+  // Draw the trail if there's enough points
+  if (hasMoved && trail.length >= 4) {
+    // Shimmer effect for glow
+    const shimmer = 1 + 0.1 * Math.sin(time);
+    const outerBlur = 50 * shimmer;
+    const innerBlur = 35 * shimmer;
+
+    // Outer glow trail
+    ctx.beginPath();
+    ctx.moveTo(trail[0].x, trail[0].y);
+    for (let i = 1; i < trail.length - 2; i += 1) {
+      if (i + 2 < trail.length) {
+        ctx.bezierCurveTo(
+          trail[i].x, trail[i].y,
+          trail[i + 1].x, trail[i + 1].y,
+          trail[i + 2].x, trail[i + 2].y
+        );
+      }
+    }
+    ctx.lineTo(trail[trail.length - 1].x, trail[trail.length - 1].y);
+
+    ctx.strokeStyle = outerGlowColor;
+    ctx.shadowColor = outerGlowColor;
+    ctx.shadowBlur = outerBlur;
+    ctx.lineWidth = 18;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
+
+    // Inner glow trail
+    ctx.beginPath();
+    ctx.moveTo(trail[0].x, trail[0].y);
+    for (let i = 1; i < trail.length - 2; i += 1) {
+      if (i + 2 < trail.length) {
+        ctx.bezierCurveTo(
+          trail[i].x, trail[i].y,
+          trail[i + 1].x, trail[i + 1].y,
+          trail[i + 2].x, trail[i + 2].y
+        );
+      }
+    }
+    ctx.lineTo(trail[trail.length - 1].x, trail[trail.length - 1].y);
+
+    ctx.strokeStyle = glowColor;
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = innerBlur;
+    ctx.lineWidth = 14;
+    ctx.stroke();
+
+    // Core white trail
+    ctx.beginPath();
+    ctx.moveTo(trail[0].x, trail[0].y);
+    for (let i = 1; i < trail.length - 2; i += 1) {
+      if (i + 2 < trail.length) {
+        ctx.bezierCurveTo(
+          trail[i].x, trail[i].y,
+          trail[i + 1].x, trail[i + 1].y,
+          trail[i + 2].x, trail[i + 2].y
+        );
+      }
+    }
+    ctx.lineTo(trail[trail.length - 1].x, trail[trail.length - 1].y);
+
+    ctx.strokeStyle = coreColor;
+    ctx.shadowColor = coreColor;
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 7;
+    ctx.stroke();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+animate();
 
 // Initial load
 loadProfile();
