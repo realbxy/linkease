@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Linkhub | @yourname</title>
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/modal.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+  <link rel="stylesheet" href="assets/cursor.css" />
+  <!-- Font Awesome for icons -->
+  <script src="https://kit.fontawesome.com/4b9ba14b0c.js" crossorigin="anonymous"></script>
+</head>
+<body oncopy="return false;" onpaste="return false;">
+  <!-- Background animation container -->
+  <div id="shift-bg-container" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -2;"></div>
+  <!-- Custom cursor canvas -->
+  <canvas id="cursor-canvas"></canvas>
+  <!-- Loader -->
+  <div class="loader" id="loader">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Home Button (Top Left) -->
+  <button class="action-button home-button" id="homeButton" title="Home" aria-label="Home">
+    <img src="https://cdn.jsdelivr.net/npm/bootstrap-icons/icons/house.svg" alt="Home Icon" class="action-icon" /> Home
+  </button>
+
+  <!-- Edit Button (Top Right) -->
+  <button class="action-button edit-toggle" id="editToggle" title="Edit Profile" aria-label="Edit Profile">
+    <img src="https://cdn.jsdelivr.net/npm/bootstrap-icons/icons/pencil.svg" alt="Pencil Icon" class="action-icon" /> Edit
+  </button>
+
+  <!-- Main content container -->
+  <div class="container animate" style="display: none;" id="mainContainer">
+    <h1 id="displayName">@yourname</h1>
+    <div class="profile-pic-container">
+      <img id="profilePic" src="https://i.pravatar.cc/100?u=yourusername" alt="Profile Picture" class="profile-pic" />
+      <input type="file" id="profilePicUpload" accept="image/*" style="display: none;" />
+    </div>
+    <div class="follow-section">
+      <button class="follow-btn" id="followBtn">Follow</button>
+      <span class="follower-count" id="followerCount">0 followers</span>
+    </div>
+    <p class="bio" id="bioText"><span id="typewriter"></span><span class="cursor">|</span></p>
+    <div class="links" id="linksContainer"></div>
+    <div class="links-nav" id="linksNav"></div>
+  </div>
+
+  <!-- Share Button (Moved to Bottom Center) -->
+  <button class="action-button share-button" id="shareButton" title="Share" aria-label="Share">
+    <img src="https://cdn.jsdelivr.net/npm/bootstrap-icons/icons/share.svg" alt="Share Icon" class="action-icon" /> Share
+  </button>
+
+  <!-- Settings Modal -->
+  <div class="modal" id="settingsModal" role="dialog" aria-labelledby="settingsModalTitle">
+    <div class="modal-wrapper">
+      <div class="modal-content">
+        <button class="close-modal" aria-label="Close Settings">×</button>
+        <h2 id="settingsModalTitle">Edit Profile</h2>
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="profile">Profile</button>
+          <button class="tab-btn" data-tab="links">Links</button>
+          <button class="tab-btn" data-tab="theme">Theme</button>
+        </div>
+        <div class="tab-content" id="profileTab">
+          <div class="input-group">
+            <label for="editName">Display Name</label>
+            <input type="text" id="editName" placeholder="Display Name" />
+          </div>
+          <div class="input-group">
+            <label for="editBio">Bio</label>
+            <div class="bio-container">
+              <textarea id="editBio" placeholder="Bio" maxlength="80" rows="3"></textarea>
+              <span class="char-count" id="bioCharCount">0/80</span>
+            </div>
+          </div>
+          <div class="tab-actions">
+            <button class="save-tab-btn" data-tab="profile">Save</button>
+            <button class="discard-tab-btn" data-tab="profile">Discard Changes</button>
+          </div>
+        </div>
+        <div class="tab-content" id="linksTab" style="display: none;">
+          <div class="links-editor" id="linksEditor"></div>
+          <button class="add-link-btn" id="addLinkBtn">+ Add Link</button>
+          <div class="tab-actions">
+            <button class="save-tab-btn" data-tab="links">Save</button>
+            <button class="discard-tab-btn" data-tab="links">Discard Changes</button>
+          </div>
+        </div>
+        <div class="tab-content" id="themeTab" style="display: none;">
+          <div class="theme-grid">
+            <div class="theme-item">
+              <label for="bgColor">Background Color</label>
+              <div class="color-input-wrapper">
+                <div class="color-picker-container">
+                  <input type="color" id="bgColor" value="#f5f5f5" />
+                </div>
+                <span class="color-value" id="bgColorValue">#f5f5f5</span>
+              </div>
+            </div>
+            <div class="theme-item">
+              <label for="linkColor">Link Color</label>
+              <div class="color-input-wrapper">
+                <div class="color-picker-container">
+                  <input type="color" id="linkColor" value="#000000" />
+                </div>
+                <span class="color-value" id="linkColorValue">#000000</span>
+              </div>
+            </div>
+            <div class="theme-item">
+              <label for="cardColor">Profile Card Color</label>
+              <div class="color-input-wrapper">
+                <div class="color-picker-container">
+                  <input type="color" id="cardColor" value="#ffffff" />
+                </div>
+                <span class="color-value" id="cardColorValue">#ffffff</span>
+              </div>
+            </div>
+            <div class="theme-item">
+              <label for="textColor">Text Color</label>
+              <div class="color-input-wrapper">
+                <div class="color-picker-container">
+                  <input type="color" id="textColor" value="#333333" />
+                </div>
+                <span class="color-value" id="textColorValue">#333333</span>
+              </div>
+            </div>
+            <div class="theme-item">
+              <label for="linkBoxTextColor">Link Box Text Color</label>
+              <div class="color-input-wrapper">
+                <div class="color-picker-container">
+                  <input type="color" id="linkBoxTextColor" value="#ffffff" />
+                </div>
+                <span class="color-value" id="linkBoxTextColorValue">#ffffff</span>
+              </div>
+            </div>
+          </div>
+          <div class="tab-actions">
+            <button class="save-tab-btn" data-tab="theme">Save</button>
+            <button class="discard-tab-btn" data-tab="theme">Discard Changes</button>
+          </div>
+        </div>
+      </div>
+      <div class="preview-section">
+        <h3>Preview</h3>
+        <div class="preview-container" id="previewContainer">
+          <h1 id="previewName">@yourname</h1>
+          <img id="previewPic" src="https://i.pravatar.cc/100?u=yourusername" alt="Preview Picture" class="profile-pic" />
+          <div class="follow-section">
+            <button class="follow-btn">Follow</button>
+            <span class="follower-count">0 followers</span>
+          </div>
+          <p class="bio" id="previewBio">Welcome to my links below 👇</p>
+          <div class="links" id="previewLinks"></div>
+          <div class="links-nav" id="previewLinksNav"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Files -->
+  <script src="assets/noise.min.js"></script>
+  <script src="js/shift-background.js"></script>
+  <script type="module" src="js/utils.js"></script>
+  <script type="module" src="js/profile-manager.js"></script>
+  <script type="module" src="js/link-manager.js"></script>
+  <script type="module" src="js/ui-interactions.js"></script>
+  <script type="module" src="js/main.js"></script>
+  <script src="assets/cursor.js"></script>
+</body>
+</html>
