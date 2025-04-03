@@ -1,0 +1,75 @@
+:root {
+  --bg-color: #f5f5f5;
+  --text-color: #333;
+  --profile-text-color: #333;
+  --link-box-text-color: #ffffff;
+  --card-bg: #ffffff;
+  --link-bg: #000000;
+  --link-text: #ffffff;
+  --link-hover: #333333;
+  --font-main: 'Segoe UI', sans-serif;
+  --modal-bg: #ffffff;
+  --modal-text: #333;
+  --input-border: #ddd;
+  --input-bg: #f9f9f9;
+  --accent-color: #6200ea;
+  --accent-hover: #7c4dff;
+}
+
+body {
+  font-family: var(--font-main);
+  background: var(--bg-color);
+  color: var(--text-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  margin: 0;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  cursor: none;
+}
+
+.container {
+  background: var(--card-bg);
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  position: relative; /* Ensure Share button can be positioned relative to this */
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+  color: var(--profile-text-color);
+}
+
+h1 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 10px 0 20px;
+  color: var(--profile-text-color);
+}
+
+.bio {
+  font-size: 16px;
+  margin-bottom: 16px;
+  min-height: 24px;
+  position: relative;
+  white-space: pre-wrap;
+  color: var(--profile-text-color);
+}
+
+body, .container, .links, h1, p, .bio, .follower-count {
+  user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+}
+
+input, textarea, [contenteditable="true"] {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}

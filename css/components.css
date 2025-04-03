@@ -1,0 +1,250 @@
+/* Base style for action buttons */
+.action-button {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background-color: transparent;
+  color: white;
+  text-shadow: 0 0 1px black;
+  border-radius: 9999px;
+  cursor: none;
+  transition: all 0.2s ease, transform 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.25);
+}
+
+/* Edit Button (Top Right) */
+.edit-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
+/* Home Button (Top Left) */
+.home-button {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+}
+
+/* Share Button (Bottom Center) */
+.share-button {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background-color: transparent;
+  color: white;
+  text-shadow: 0 0 1px black;
+  border-radius: 9999px;
+  cursor: none;
+  transition: all 0.2s ease, transform 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.share-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: translateX(-50%) scale(1.25);
+}
+
+.action-icon {
+  width: 14px;
+  height: 14px;
+  fill: white;
+  filter: invert(1);
+}
+
+.profile-pic-container {
+  position: relative;
+  cursor: none;
+  margin-bottom: 16px;
+}
+
+.profile-pic {
+  border-radius: 50%;
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.profile-pic:hover {
+  transform: scale(1.05);
+}
+
+.follow-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.follow-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 20px;
+  background: var(--accent-color);
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(98, 0, 234, 0.3);
+}
+
+.follow-btn.followed {
+  background: #ccc;
+  color: #333;
+  box-shadow: none;
+}
+
+.follow-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(98, 0, 234, 0.4);
+}
+
+.follower-count {
+  font-size: 14px;
+  color: var(--text-color);
+  background: #f0f0f0;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: 500;
+  transition: transform 0.3s ease;
+}
+
+.follower-count:hover {
+  transform: translateY(-2px);
+}
+
+.links {
+  position: relative;
+  height: 340px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0 20px 20px;
+}
+
+.links a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--link-bg);
+  color: var(--link-box-text-color);
+  text-decoration: none;
+  padding: 14px 18px;
+  border-radius: 12px;
+  margin: 10px 0;
+  font-weight: 600;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, opacity 0.5s ease;
+  cursor: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  opacity: 0;
+  transform: translateX(20px) translateY(10px);
+  position: relative;
+  overflow: hidden;
+}
+
+.links a::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: 0.5s;
+  z-index: 1;
+}
+
+.links a:hover::before {
+  left: 100%;
+}
+
+.links a.visible {
+  opacity: 1;
+  transform: translateX(0) translateY(0);
+}
+
+.links a:hover {
+  transform: translateY(-2px) scale(1.1);
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+}
+
+.links .click-count {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--link-box-text-color);
+}
+
+.links a img.social-logo {
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  filter: invert(1);
+}
+
+.links-nav {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.links-nav .dot {
+  width: 14px;
+  height: 14px;
+  background: var(--profile-text-color);
+  opacity: 0.3;
+  border-radius: 50%;
+  cursor: none;
+  transition: all 0.3s ease;
+}
+
+.links-nav .dot.active {
+  opacity: 1;
+  transform: scale(1.3);
+  background: var(--accent-color);
+}
+
+.links-nav .dot:hover {
+  opacity: 0.7;
+  transform: scale(1.2);
+}
+
+.add-link-btn {
+  padding: 12px 20px;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(98, 0, 234, 0.3);
+}
+
+.add-link-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(98, 0, 234, 0.4);
+}
