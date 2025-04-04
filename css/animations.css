@@ -55,10 +55,7 @@
 
 .modal-content,
 .preview-section {
-  animation: slideIn 0.3s ease;
+  animation: fadeIn 0.7s ease; /* Changed from slideIn to fadeIn to match profile card */
 }
 
-@keyframes slideIn {
-  from { transform: translateY(100px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
+/* Removed @keyframes slideIn since it's no longer used */
