@@ -10,12 +10,12 @@ const bgColor = document.getElementById("bgColor");
 const linkColor = document.getElementById("linkColor");
 const cardColor = document.getElementById("cardColor");
 const textColor = document.getElementById("textColor");
-const linkBoxTextColor = document.getElementById("linkBoxTextColor"); // New link box text color
+const linkBoxTextColor = document.getElementById("linkBoxTextColor");
 const bgColorValue = document.getElementById("bgColorValue");
 const linkColorValue = document.getElementById("linkColorValue");
 const cardColorValue = document.getElementById("cardColorValue");
 const textColorValue = document.getElementById("textColorValue");
-const linkBoxTextColorValue = document.getElementById("linkBoxTextColorValue"); // New link box text color value
+const linkBoxTextColorValue = document.getElementById("linkBoxTextColorValue");
 const previewContainer = document.getElementById("previewContainer");
 
 let followers = parseInt(localStorage.getItem("followers") || "0");
@@ -41,12 +41,15 @@ followBtn.addEventListener("click", () => {
   followerCount.textContent = `${followers} followers`;
   localStorage.setItem("followers", followers);
   localStorage.setItem("isFollowing", isFollowing);
-  // Update preview follower count
   const previewFollowerCount = document.querySelector("#previewContainer .follower-count");
   previewFollowerCount.textContent = followerCount.textContent;
 });
 
-editToggle.addEventListener("click", () => modal.style.display = "flex");
+editToggle.addEventListener("click", () => {
+  modal.style.display = "flex";
+  // Reset preview scroll position to the top
+  document.querySelector(".preview-section").scrollTop = 0;
+});
 
 closeModal.addEventListener("click", () => modal.style.display = "none");
 
@@ -78,7 +81,6 @@ function updateThemePreview() {
   document.documentElement.style.setProperty("--link-box-text-color", linkBoxTextColor.value);
   previewContainer.style.background = cardColor.value;
   previewContainer.style.color = textColor.value;
-  // Update link box text color in preview
   const previewLinks = document.querySelectorAll("#previewLinks a");
   previewLinks.forEach(link => {
     link.style.color = linkBoxTextColor.value;
