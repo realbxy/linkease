@@ -45,7 +45,7 @@
   font-size: 28px;
   border: none;
   background: transparent;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   color: white;
   transition: color 0.2s ease, transform 0.2s ease;
 }
@@ -75,7 +75,7 @@
   background-color: transparent;
   color: white;
   border-radius: 9999px;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   transition: all 0.3s ease, transform 0.3s ease;
 }
 
@@ -127,6 +127,11 @@
   transition: all 0.3s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   resize: none;
+  cursor: text; /* Added for text inputs and textareas */
+}
+
+.tab-content select {
+  cursor: pointer; /* Added for select elements */
 }
 
 .tab-content input:focus,
@@ -142,7 +147,7 @@
   padding: 0;
   height: 100%;
   width: 100%;
-  cursor: pointer;
+  cursor: pointer; /* Ensure color picker has pointer cursor */
   border: none;
   background: transparent;
   -webkit-appearance: none;
@@ -228,7 +233,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  cursor: move;
+  cursor: move; /* Kept for drag-and-drop functionality */
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.2);
   transition: all 0.3s ease;
@@ -269,10 +274,11 @@
   font-size: 14px;
   transition: all 0.3s ease;
   color: white;
+  cursor: text; /* Added for text inputs */
 }
 
 .link-item select {
-  cursor: pointer;
+  cursor: pointer; /* Changed for select elements */
   padding-right: 30px;
   background: rgba(255, 255, 255, 0.1) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="white"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>') no-repeat right 10px center;
   background-size: 12px;
@@ -298,7 +304,7 @@
 .link-actions button {
   background: transparent;
   border: none;
-  cursor: pointer;
+  cursor: pointer; /* Changed from cursor: none */
   font-size: 14px;
   transition: all 0.2s ease;
   display: flex;
@@ -339,7 +345,7 @@
   font-weight: 600;
   border: none;
   border-radius: 8px;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
