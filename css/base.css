@@ -28,7 +28,7 @@ body {
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
-  cursor: none;
+  cursor: auto; /* Changed from cursor: none */
 }
 
 .container {
@@ -39,7 +39,7 @@ body {
   text-align: center;
   max-width: 400px;
   width: 90%;
-  position: relative; /* Ensure Share button can be positioned relative to this */
+  position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
