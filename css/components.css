@@ -8,7 +8,7 @@
   color: white;
   text-shadow: 0 0 1px black;
   border-radius: 9999px;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   transition: all 0.2s ease, transform 0.2s ease;
   display: inline-flex;
   align-items: center;
@@ -51,7 +51,7 @@
   color: white;
   text-shadow: 0 0 1px black;
   border-radius: 9999px;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   transition: all 0.2s ease, transform 0.2s ease;
   display: inline-flex;
   align-items: center;
@@ -72,7 +72,7 @@
 
 .profile-pic-container {
   position: relative;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   margin-bottom: 16px;
 }
 
@@ -104,7 +104,7 @@
   color: white;
   font-weight: 600;
   font-size: 14px;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(98, 0, 234, 0.3);
 }
@@ -154,7 +154,7 @@
   margin: 10px 0;
   font-weight: 600;
   transition: transform 0.3s ease, box-shadow 0.3s ease, opacity 0.5s ease;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   opacity: 0;
   transform: translateX(20px) translateY(10px);
@@ -216,7 +216,7 @@
   background: var(--profile-text-color);
   opacity: 0.3;
   border-radius: 50%;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   transition: all 0.3s ease;
 }
 
@@ -237,7 +237,7 @@
   color: white;
   border: none;
   border-radius: 8px;
-  cursor: none;
+  cursor: pointer; /* Changed from cursor: none */
   font-weight: 600;
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(98, 0, 234, 0.3);
