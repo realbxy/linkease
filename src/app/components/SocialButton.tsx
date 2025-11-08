@@ -1,9 +1,10 @@
+// src/components/SocialButton.tsx
 'use client';
 
 import React from 'react';
 
 interface Props {
-  icon: 'discord' | 'github' | 'spotify' | 'youtube' | 'tiktok' | 'coin' | string;
+  icon: string;
   label: string;
   href: string;
 }
@@ -19,10 +20,6 @@ export function SocialButton({ icon, label, href }: Props) {
     } catch {}
   };
 
-  // Ensure valid external URL
-  const finalHref = /^(https?:)?\/\//i.test(href) ? href : `https://${href}`;
-
-  // map icon names to image paths in /public
   const iconMap: Record<string, string> = {
     discord: '/discord.webp',
     github: '/github.webp',
@@ -32,11 +29,18 @@ export function SocialButton({ icon, label, href }: Props) {
     coin: '/coin.png',
   };
 
-  const imageSrc = iconMap[icon] || null;
+  const imageSrc = iconMap[icon] || (icon.startsWith('http') ? icon : null);
+
+  const safeHref = (() => {
+    const h = href?.trim() ?? '';
+    if (!h) return '#';
+    if (/^https?:\/\//i.test(h)) return h;
+    return `https://${h}`;
+  })();
 
   return (
     <a
-      href={finalHref}
+      href={safeHref}
       target="_blank"
       rel="noopener noreferrer"
       onMouseEnter={playSound}
