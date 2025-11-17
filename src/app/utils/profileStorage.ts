@@ -6,6 +6,12 @@ export type SocialLink = {
   href: string;
 };
 
+export type Badge = {
+  id: string;
+  name?: string;
+  image?: string; // data URL or remote URL
+};
+
 export type Profile = {
   displayName: string;
   username: string;
@@ -17,7 +23,7 @@ export type Profile = {
   backgroundImage?: string | undefined; // data URL or remote URL
   bgAudio?: string | undefined; // data URL or remote URL
   volume?: number; // 0..1
-  badges: string[];
+  badges: Badge[];
   profileViews: string;
   socials: SocialLink[];
 };
@@ -35,7 +41,10 @@ export const DEFAULT_PROFILE: Profile = {
   backgroundImage: undefined,
   bgAudio: undefined,
   volume: 0.35,
-  badges: ['Verified', 'Early'],
+  badges: [
+    { id: 'b-verified', name: 'Verified' },
+    { id: 'b-early', name: 'Early' },
+  ],
   profileViews: '10.8k',
   socials: [
     { id: '1', icon: 'discord', label: 'Discord', href: '#' },
@@ -53,10 +62,20 @@ export function loadProfile(): Profile {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_PROFILE;
     const parsed = JSON.parse(raw) as Partial<Profile>;
+    // support legacy string[] badges: convert to Badge[]
+    let badges: Badge[] = DEFAULT_PROFILE.badges;
+    if (parsed.badges && Array.isArray(parsed.badges)) {
+      const rawBadges: any[] = parsed.badges as any[];
+      badges = rawBadges.map((b, i) => {
+        if (b && typeof b === 'object') return b as Badge;
+        return { id: `b-${i}-${String(b).slice(0, 8)}`, name: String(b) } as Badge;
+      });
+    }
+
     return {
       ...DEFAULT_PROFILE,
       ...parsed,
-      badges: parsed.badges ?? DEFAULT_PROFILE.badges,
+      badges,
       socials: parsed.socials ?? DEFAULT_PROFILE.socials,
       backgroundColor: parsed.backgroundColor ?? DEFAULT_PROFILE.backgroundColor,
       cardColor: parsed.cardColor ?? DEFAULT_PROFILE.cardColor,
@@ -80,8 +99,8 @@ export function saveProfile(profile: Profile): boolean {
     const copy = { ...profile };
     const json = JSON.stringify(copy);
 
-    // keep under ~4.5MB
-    if (json.length > 4_500_000) {
+    // keep under ~10MB (increased for media assets)
+    if (json.length > 10_000_000) {
       // caller should show a user-visible message
       console.warn('Profile too large to save to localStorage');
       return false;

@@ -3,49 +3,102 @@
 import { motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 
-export function Typewriter({ text, speed = 40 }: { text: string; speed?: number }) {
-  // speed controls per-character stagger (ms)
+export function Typewriter({
+  text,
+  speed = 280,
+  pause = 2800,
+  glow = true,
+  glowColor = 'rgba(255, 255, 255, 0.8)',
+  className = '',
+  blinkSpeed = 1.1, // How fast it blinks
+}: {
+  text: string;
+  speed?: number;
+  pause?: number;
+  glow?: boolean;
+  glowColor?: string;
+  className?: string;
+  blinkSpeed?: number;
+}) {
   const chars = useMemo(() => Array.from(text), [text]);
   const [replayKey, setReplayKey] = useState(0);
 
   useEffect(() => {
-    // replay every (chars * speed + pause) ms to loop the typing effect smoothly
-    const total = chars.length * speed + 2000;
-    const t = setInterval(() => setReplayKey((k) => k + 1), total);
-    return () => clearInterval(t);
-  }, [chars.length, speed]);
+    const total = chars.length * speed + pause;
+    const timer = setInterval(() => setReplayKey((k) => k + 1), total);
+    return () => clearInterval(timer);
+  }, [chars.length, speed, pause]);
+
+  const glowStyle = glow
+    ? {
+        textShadow: `
+          0 0 10px ${glowColor},
+          0 0 20px ${glowColor},
+          0 0 30px ${glowColor}
+        `,
+      }
+    : {};
+
+  const typingDuration = chars.length * speed;
+  const blinkDuration = 800; // ms to keep blinking after typing
+  const totalActiveTime = typingDuration + blinkDuration;
 
   return (
-    <motion.span key={replayKey} aria-label={text} className="inline-block">
-      <motion.span
-        initial="hidden"
-        animate="visible"
-        variants={{
-          hidden: {},
-          visible: {},
-        }}
-      >
-        {chars.map((c, i) => (
+    <motion.span
+      key={replayKey}
+      aria-label={text}
+      className={`inline-block font-mono ${className}`}
+      style={glowStyle}
+    >
+      {/* Text */}
+      <motion.span initial="hidden" animate="visible">
+        {chars.map((char, i) => (
           <motion.span
-            key={i + '-' + replayKey}
+            key={`${i}-${replayKey}`}
             className="inline-block"
-            initial={{ opacity: 0, y: 6 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.12, delay: (i * speed) / 1000 }}
+            transition={{
+              duration: 0.22,
+              delay: (i * speed) / 1000,
+              ease: [0.2, 0.65, 0.4, 1],
+            }}
           >
-            {c}
+            {char === ' ' ? '\u00A0' : char}
           </motion.span>
         ))}
       </motion.span>
 
-      {/* blinking cursor */}
+      {/* Blinking Cursor: Only active during typing + short afterglow */}
       <motion.span
-        className="inline-block ml-1 w-[7px] h-5 align-middle bg-white/90 rounded-sm"
-        initial={{ opacity: 1 }}
-        animate={{ opacity: [1, 0.15, 1] }}
-        transition={{ repeat: Infinity, duration: 1.05, ease: 'easeInOut' }}
-        aria-hidden
-      />
+        className="inline-block w-[2px] ml-1 bg-white/90 align-middle"
+        style={{
+          height: '0.85em',
+          marginBottom: '-0.15em',
+          borderRadius: '1px',
+        }}
+        initial={{ opacity: 0 }}
+        animate={{
+          opacity: [0, 1, 1, 0], // fade in → blink → fade out
+        }}
+        transition={{
+          duration: (totalActiveTime / 1000) + 0.3,
+          times: [0, 0.03, 0.97, 1],
+          ease: 'easeInOut',
+        }}
+      >
+        {/* Inner blinking effect */}
+        <motion.span
+          className="block h-full w-full bg-current"
+          animate={{ opacity: [1, 0.3, 1] }}
+          transition={{
+            repeat: Infinity,
+            duration: blinkSpeed,
+            ease: 'easeInOut',
+            delay: 0.03, // start after fade-in
+          }}
+        />
+      </motion.span>
     </motion.span>
   );
 }

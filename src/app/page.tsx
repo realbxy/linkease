@@ -5,13 +5,16 @@ import { useEffect, useState } from 'react';
 import { Typewriter } from './components/Typewriter';
 import { TiltCard } from './components/TiltCard';
 import { SocialButton } from './components/SocialButton';
-import { loadProfile, Profile } from './utils/profileStorage';
+import { LiveChat } from './components/LiveChat';
+import { loadProfile, Profile, Badge } from './utils/profileStorage';
 import { useAudio } from './providers/AudioProvider';
+import { Modal } from './components/Modal';
 
 export default function HomePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const { audioRef, playing, togglePlay, setVolume } = useAudio();
   const [blocked, setBlocked] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
 
   useEffect(() => {
     setProfile(loadProfile());
@@ -43,6 +46,9 @@ export default function HomePage() {
       className="min-h-screen flex items-center justify-center text-white relative overflow-hidden"
       style={bgStyle}
     >
+      {/* Live Chat */}
+      <LiveChat />
+
       {/* overlay */}
       <div className="absolute inset-0 bg-black/50 pointer-events-none" />
 
@@ -94,12 +100,25 @@ export default function HomePage() {
 
       {/* main content */}
       <div className="w-[min(92%,1200px)] flex flex-col items-center gap-8 z-40 p-6">
-        <div className="flex w-full justify-end">
-          <Link
-            href="/edit"
-            className="text-sm text-gray-300 bg-black/30 px-3 py-2 rounded-md border border-white/6 hover:scale-[1.02] transition"
+        <div className="flex w-full justify-end" />
+
+        {/* Top-right controls: live viewers and edit icon */}
+        <div className="absolute top-6 right-6 z-50 flex items-center gap-3">
+          <button
+            onClick={() => setShowStatsModal(true)}
+            className="flex items-center gap-2 bg-[rgba(6,6,7,0.7)] border border-white/6 rounded-full px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.7)] backdrop-blur-sm hover:bg-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer"
           >
-            Edit profile
+            <svg className="w-5 h-5 text-white/90" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7S2.5 12 2.5 12z" />
+              <circle cx="12" cy="12" r="3" fill="currentColor" />
+            </svg>
+            <span className="text-sm text-white">1</span>
+          </button>
+
+          <Link href="/edit" className="bg-[rgba(6,6,7,0.7)] border border-white/6 p-2 rounded-full text-gray-300 hover:bg-white/10 hover:border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.7)] transition-all duration-300">
+            <svg className="w-5 h-5 text-white/90" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M4 20h4.768L20.485 8.283a2 2 0 0 0 0-2.828L18.545 3.515a2 2 0 0 0-2.828 0L4 15.232V20z" />
+            </svg>
           </Link>
         </div>
 
@@ -112,12 +131,17 @@ export default function HomePage() {
                 className="w-36 h-36 rounded-full border border-white/8 object-cover"
               />
               <div className="mt-4 inline-flex items-center gap-3 bg-black/30 px-3 py-1.5 rounded-full border border-white/5">
-                {profile.badges.map((b) => (
+                {profile.badges.map((b: Badge) => (
                   <span
-                    key={b}
-                    className="text-gray-300 px-3 py-1 rounded-full bg-black/20 border border-white/3 text-xs"
+                    key={b.id}
+                    className="text-gray-300 px-3 py-1 rounded-full bg-black/20 border border-white/3 text-xs flex items-center gap-2"
+                    title={b.name ?? (b.image ? 'Image badge' : '')}
                   >
-                    {b}
+                    {b.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={b.image} alt={b.name ?? 'badge'} className="w-4 h-4 rounded-full object-cover" />
+                    ) : null}
+                    <span>{b.name}</span>
                   </span>
                 ))}
               </div>
@@ -131,16 +155,6 @@ export default function HomePage() {
               {profile.socials.map((s) => (
                 <SocialButton key={s.id} icon={s.icon} label={s.label} href={s.href} />
               ))}
-            </div>
-
-            <div className="mt-6 border-t border-white/6 pt-4 flex justify-between text-xs text-gray-500">
-              <span>
-                Profile Views:{' '}
-                <strong className="text-gray-300">{profile.profileViews}</strong>
-              </span>
-              <span>
-                UID: <strong className="text-gray-300">{profile.tag}</strong>
-              </span>
             </div>
           </div>
         </TiltCard>
@@ -166,6 +180,43 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Stats Modal */}
+      <Modal open={showStatsModal} onClose={() => setShowStatsModal(false)} title="Profile Stats">
+        <div className="space-y-4">
+          <div className="flex items-center gap-4 bg-black/20 rounded-lg p-4 border border-white/10">
+            <svg className="w-8 h-8 text-white/60 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7S2.5 12 2.5 12z" />
+              <circle cx="12" cy="12" r="3" fill="currentColor" />
+            </svg>
+            <div>
+              <p className="text-xs text-gray-400 uppercase tracking-wide">Current Viewers</p>
+              <p className="text-2xl font-bold text-white">1</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 bg-black/20 rounded-lg p-4 border border-white/10">
+            <svg className="w-8 h-8 text-white/60 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <div>
+              <p className="text-xs text-gray-400 uppercase tracking-wide">Total Profile Views</p>
+              <p className="text-2xl font-bold text-white">{profile?.profileViews ?? 0}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 bg-black/20 rounded-lg p-4 border border-white/10">
+            <svg className="w-8 h-8 text-white/60 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+            </svg>
+            <div>
+              <p className="text-xs text-gray-400 uppercase tracking-wide">UID Tag</p>
+              <p className="text-2xl font-bold text-white font-mono">{profile?.tag ?? 'N/A'}</p>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </main>
   );
 }
