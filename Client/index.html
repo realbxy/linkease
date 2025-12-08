@@ -1,0 +1,1991 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="An agar.io client made for MultiOgar based servers.">
+    <meta name="keywords" content="agario, agar, io, cell, cells, virus, bacteria, blob, game, games, web game, html5, fun, flash">
+    <meta name="robots" content="index, follow">
+    <meta property="og:image" content="http://agar.io/img/1200x630.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="viewport" content="minimal-ui, width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>MultiOgar Client</title>
+    <link id="favicon" rel="icon" type="image/png" href="assets/img/favicon.png" />
+    <link href="https://fonts.googleapis.com/css?family=Ubuntu:700" rel="stylesheet" type="text/css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css" rel="stylesheet">
+    <link href="assets/css/index.css" rel="stylesheet">
+    <script src="assets/js/jquery-1.11.3.min.js"></script>
+    <script src="assets/js/main_out.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            font-family: 'Inter','Ubuntu',sans-serif;
+        }
+        #overlays {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+        }
+        #helloDialog {
+            display: flex !important;
+            background-color: #ffffff00;
+            justify-content: center !important;
+            align-items: center !important;
+            min-height: 100vh !important;
+            width: 100%;
+        }
+        #connecting {
+            display: none !important;
+        }
+
+        /* Linesplit indicator */
+        #lineLockIndicator {
+            position: fixed;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+            pointer-events: none;
+            display: none;
+            z-index: 9999;
+        }
+
+        /* ---- glass UI ---- */
+        .game-ui-wrapper {
+            width: 1008px;
+            max-width: 100%;
+            height: 500px;
+            display: flex;
+            gap: 24px;
+            position: relative;
+        }
+        .glass-card {
+            background: rgba(10,10,10,0.9);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 28px;
+            box-shadow: 0 12px 50px rgba(0,0,0,0.6);
+            color: #fff;
+            width: 320px;
+            min-width: 320px;
+            max-width: 320px;
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+        }
+        .glass-card.full-height {
+            height: 500px;
+            min-height: 500px;
+            max-height: 500px;
+        }
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            width: 320px;
+            min-width: 320px;
+            max-width: 320px;
+            height: 500px;
+            gap: 16px;
+        }
+        .profile-card {
+            height: 150px;
+        }
+        .tab-section {
+            height: 368px;
+        }
+        .profile-card,
+        .tab-section {
+            background: rgba(10,10,10,0.9);
+            border-radius: 28px;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 12px 50px rgba(0,0,0,0.6);
+            padding: 16px;
+        }
+
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 16px;
+            height: 32px;
+        }
+        .tab-button {
+            flex: 1;
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 8px 0;
+            text-align: center;
+            transition: transform .2s ease, color .2s ease;
+            position: relative;
+        }
+        .tab-button:hover { transform: scale(1.05); color: #fff; }
+        .tab-button.active { color:#fff; }
+        .tab-button.active::after {
+            content:'';
+            position:absolute;
+            bottom:0; left:50%;
+            transform:translateX(-50%);
+            width:40%; height:2px;
+            background:rgba(255,255,255,.8);
+            border-radius:2px;
+        }
+
+        .tab-content {
+            flex:1;
+            display:none;
+            overflow-y:auto;
+            padding-right:8px;
+        }
+        .tab-content.active {
+            display:flex;
+            flex-direction:column;
+        }
+        .tab-content::-webkit-scrollbar{width:8px;}
+        .tab-content::-webkit-scrollbar-track{background:rgba(255,255,255,.05);border-radius:4px;}
+        .tab-content::-webkit-scrollbar-thumb{background:rgba(255,255,255,.3);border-radius:4px;}
+
+        .server-group{margin-bottom:12px;}
+        .server-header{
+            background:rgba(255,255,255,.06);
+            padding:10px 14px;
+            border-radius:12px;
+            font-size:14px;
+            font-weight:600;
+            cursor:pointer;
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            transition:background .2s ease,transform .2s ease;
+            box-shadow:0 4px 12px rgba(0,0,0,.35);
+        }
+        .server-header:hover{background:rgba(255,255,255,.12);transform:translateY(-1px);}
+        .server-header::after{content:'▼';font-size:12px;transition:transform .3s ease;}
+        .server-header.active::after{transform:rotate(180deg);}
+        .server-list{
+            max-height:0;
+            overflow:hidden;
+            transition:max-height .4s ease,opacity .3s ease;
+            opacity:0;
+            margin-top:6px;
+            background:rgba(255,255,255,.03);
+            border-radius:12px;
+            border:1px solid rgba(255,255,255,.12);
+        }
+        .server-list.active{max-height:300px;opacity:1;}
+        .server-item{
+            padding:10px 14px;
+            font-size:13px;
+            color:rgba(255,255,255,.9);
+            border-bottom:1px solid rgba(255,255,255,.08);
+            cursor:pointer;
+            display:flex;
+            align-items:center;
+            gap:8px;
+            transition:background .2s ease,color .2s ease,transform .2s ease;
+        }
+        .server-item:last-child{border-bottom:none;}
+        .server-item:hover{background:rgba(255,255,255,.1);color:#fff;transform:translateX(4px);}
+        .server-item.active{
+            background:rgba(255,255,255,.2);
+            border-left:4px solid rgba(255,255,255,.85);
+            padding-left:10px;
+        }
+        .server-item svg{width:16px;height:16px;stroke:#fff;fill:none;}
+        .player-count{margin-left:auto;font-size:11px;color:rgba(255,255,255,.7);}
+
+        .top-icons{display:flex;justify-content:space-between;margin-bottom:16px;gap:6px;}
+        .top-icons button{background:none;border:none;padding:4px;cursor:pointer;transition:transform .2s ease;}
+        .top-icons button:hover{transform:scale(1.2);}
+        .top-icons svg{width:20px;height:20px;stroke:#fff;fill:none;}
+
+        .avatar-container{
+            height:220px;
+            margin-top:40px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            position:relative;
+            margin-bottom:16px;
+            width:100%;
+        }
+        .avatar-button{
+            position:absolute;
+            top:50%;
+            transform:translateY(-50%);
+            background:none;
+            border:none;
+            font-size:20px;
+            color:#fff;
+            cursor:pointer;
+            padding:8px;
+            transition:transform .2s ease;
+        }
+        .avatar-button.left{left:-8px;}
+        .avatar-button.right{right:-8px;}
+        .avatar-button:hover{transform:translateY(-50%) scale(1.15);}
+        #skinPreview{
+            width:220px;height:220px;
+            border-radius:50%;
+            background-size:cover;
+            background-position:center;
+            border:1px solid rgba(255,255,255,.25);
+            position:relative;
+            overflow:hidden;
+            transition:transform .3s ease,opacity .3s ease;
+        }
+        #skinPreview::before{
+            content:'';
+            position:absolute;top:0;left:-150%;
+            width:75%;height:100%;
+            background:linear-gradient(120deg,transparent 0%,rgba(255,255,255,.2) 50%,transparent 100%);
+            animation:shimmer 4s infinite ease-in-out;
+        }
+        #skinPreview.transition{opacity:0;transform:scale(.9);}
+        @keyframes shimmer{0%{left:-150%;}25%{left:150%;}100%{left:150%;}}
+
+        .input-row{display:flex;margin-top:auto;gap:8px;}
+        .input-row input:first-child{width:65%;}
+        .input-row input:last-child{width:30%;}
+        .input-row input,
+        .skin-input input{
+            padding:8px;
+            border-radius:8px;
+            border:none;
+            background:rgba(255,255,255,.08);
+            color:#fff;
+            font-size:13px;
+        }
+        .input-row input:focus,
+        .skin-input input:focus{
+            background:rgba(255,255,255,.15);
+            outline:none;
+        }
+        .skin-input{margin-top:8px;display:flex;}
+        .skin-input input{width:100%;}
+
+        .play-section{
+            margin-top:10px;
+            display:flex;
+            align-items:center;
+            gap:8px;
+        }
+        .play-section button{
+            padding:8px;
+            background:rgba(255,255,255,.18);
+            color:#fff;
+            border:none;
+            border-radius:8px;
+            cursor:pointer;
+            transition:background .2s ease,transform .2s ease;
+            height:36px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+        }
+        .play-section button:hover{background:rgba(255,255,255,.26);transform:scale(1.05);}
+        .play-btn{flex:1;}
+        .play-section svg{width:20px;height:20px;stroke:#fff;fill:none;}
+
+        .profile-picture{
+            width:60px;height:60px;
+            border-radius:50%;
+            border:1px solid rgba(255,255,255,.2);
+            background-image:url('https://via.placeholder.com/60');
+            background-size:cover;
+            background-position:center;
+            position:relative;
+            overflow:hidden;
+        }
+
+        .skins-container{position:relative;flex:1;overflow:hidden;height:304px;}
+        .skins-pages{display:flex;transition:transform .3s ease;height:100%;}
+        .skins-page{
+            flex:0 0 100%;
+            display:grid;
+            grid-template-columns:repeat(3,1fr);
+            gap:16px;
+            justify-items:center;
+            align-items:center;
+            padding:8px 0;
+        }
+        .skin-circle{
+            width:80px;height:80px;
+            border-radius:50%;
+            background-size:cover;
+            background-position:center;
+            border:1px solid rgba(255,255,255,.25);
+            position:relative;
+            overflow:hidden;
+            transition:transform .3s ease,border .2s ease;
+            cursor:pointer;
+        }
+        .skin-circle:hover{transform:scale(1.05);}
+        .skin-circle.active{border:2px solid rgba(255,255,255,.85);}
+        .skin-circle::before{
+            content:'';
+            position:absolute;top:0;left:-150%;
+            width:75%;height:100%;
+            background:linear-gradient(120deg,transparent 0%,rgba(255,255,255,.2) 50%,transparent 100%);
+            animation:shimmer 4s infinite ease-in-out;
+        }
+        .add-skin{
+            width:80px;height:80px;
+            border-radius:50%;
+            background:rgba(255,255,255,.12);
+            border:1px solid rgba(255,255,255,.25);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:24px;
+            color:#fff;
+            cursor:pointer;
+            transition:transform .3s ease;
+        }
+        .add-skin:hover{transform:scale(1.05);}
+        .carousel-dots{
+            display:flex;
+            justify-content:center;
+            gap:8px;
+            margin-top:8px;
+            height:16px;
+        }
+        .carousel-dot{
+            width:8px;height:8px;
+            border-radius:50%;
+            background:rgba(255,255,255,.3);
+            cursor:pointer;
+            transition:background .2s ease;
+        }
+        .carousel-dot.active{background:rgba(255,255,255,.85);}
+
+        /* overlay modals */
+        .overlay-modal{
+            position:absolute;
+            top:50%;left:50%;
+            transform:translate(-50%,-50%);
+            background:rgba(10,10,10,.97);
+            border:1px solid rgba(255,255,255,.2);
+            border-radius:28px;
+            box-shadow:0 12px 50px rgba(0,0,0,.7);
+            color:#fff;
+            width:320px;
+            max-width:320px;
+            height:500px;
+            max-height:500px;
+            padding:20px;
+            z-index:1000;
+            display:none;
+            flex-direction:column;
+            overflow:hidden;
+        }
+        .overlay-modal.active{display:flex;}
+        .overlay-modal .modal-header{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:16px;
+            border-bottom:1px solid rgba(255,255,255,.1);
+            padding-bottom:8px;
+            position:relative;
+        }
+        .overlay-modal .modal-header h2{
+            margin:0;
+            font-size:18px;
+            font-weight:600;
+        }
+        .close-modal{
+            position:absolute;
+            top:-10px;
+            right:-10px;
+            width:32px;
+            height:32px;
+            border-radius:50%;
+            border:1px solid rgba(0,0,0,0.35);
+            background:linear-gradient(180deg,#fff 0%, #e2e2e2 100%);
+            color:#111;
+            font-size:18px;
+            font-weight:700;
+            cursor:pointer;
+            box-shadow:0 6px 16px rgba(0,0,0,0.35);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            transition:transform .15s ease, box-shadow .2s ease, background .2s ease;
+        }
+        .close-modal:hover{
+            transform:scale(1.05);
+            box-shadow:0 8px 20px rgba(0,0,0,0.45);
+            background:linear-gradient(180deg,#fff 0%, #f7f7f7 100%);
+        }
+        .overlay-modal .modal-content{
+            flex:1;
+            font-size:14px;
+            color:rgba(255,255,255,.9);
+            background:transparent !important;
+            border:none !important;
+            padding:0;
+            overflow-y:auto;
+        }
+        .overlay-modal .modal-content::-webkit-scrollbar{width:7px;}
+        .overlay-modal .modal-content::-webkit-scrollbar-track{
+            background:transparent;
+        }
+        .overlay-modal .modal-content::-webkit-scrollbar-thumb{
+            background:linear-gradient(180deg,#ff6b61 0%, #ff3b30 100%);
+            border-radius:999px;
+            box-shadow:0 0 10px rgba(255,59,48,0.45);
+            border:1px solid rgba(0,0,0,0.35);
+        }
+        .overlay-modal .modal-content::-webkit-scrollbar-thumb:hover{
+            background:linear-gradient(180deg,#ff8279 0%, #ff5346 100%);
+        }
+        .overlay-modal .modal-content{scrollbar-color:rgba(255,59,48,0.55) transparent;}
+        .overlay-modal label{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:8px;
+            margin:4px 0;
+            color:rgba(255,255,255,.85) !important;
+        }
+        .overlay-modal .form-control{
+            background:rgba(255,255,255,.08);
+            color:#fff;
+            border:none;
+        }
+        /* Settings modal custom styling */
+        .settings-modal{
+            width:320px !important;
+            max-width:320px;
+            height:500px;
+            max-height:500px;
+            padding:10px;
+            border-radius:28px;
+            background:rgba(12,12,14,0.96);
+            border:1px solid rgba(255,255,255,0.12);
+            box-shadow:0 12px 60px rgba(0,0,0,.8);
+            overflow-y:auto;
+        }
+        .settings-modal::-webkit-scrollbar{width:8px;}
+        .settings-modal::-webkit-scrollbar-track{
+            background:rgba(255,255,255,0.04);
+            border-radius:10px;
+            border:1px solid rgba(255,255,255,0.06);
+        }
+        .settings-modal::-webkit-scrollbar-thumb{
+            background:linear-gradient(180deg,#ff6b61 0%, #ff3b30 100%);
+            border-radius:10px;
+            box-shadow:0 0 8px rgba(255,59,48,0.45);
+            border:1px solid rgba(0,0,0,0.35);
+        }
+        .settings-modal::-webkit-scrollbar-thumb:hover{
+            background:linear-gradient(180deg,#ff8279 0%, #ff5346 100%);
+        }
+        .settings-content{
+            display:flex;
+            flex-direction:column;
+            gap:14px;
+        }
+        .settings-group__title{
+            background:rgba(255,255,255,0.04);
+            border-radius:12px 12px 0 0;
+            padding:10px 14px;
+            font-weight:600;
+            letter-spacing:.2px;
+            color:#fff;
+            font-size:14px;
+        }
+        .settings-card{
+            background:rgba(255,255,255,0.03);
+            border:1px solid rgba(255,255,255,0.08);
+            border-top:0;
+            border-radius:0 0 12px 12px;
+            padding:12px 14px;
+            display:flex;
+            flex-direction:column;
+            gap:12px;
+        }
+        .setting-toggle{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:12px;
+            font-size:13px;
+            font-weight:600;
+            color:#eaeaea;
+        }
+        .setting-toggle input{
+            display:none;
+        }
+        .setting-toggle .switch{
+            width:50px;
+            height:24px;
+            border-radius:20px;
+            background:#2a2a2d;
+            border:1px solid rgba(255,255,255,0.18);
+            position:relative;
+            cursor:pointer;
+            transition:all .22s ease;
+            color:#b3b3b3;
+            font-size:10px;
+            font-weight:700;
+            letter-spacing:0.3px;
+        }
+        .setting-toggle .switch::before{
+            content:'OFF';
+            position:absolute;
+            right:8px;
+            top:50%;
+            transform:translateY(-50%);
+            pointer-events:none;
+            color:#b3b3b3;
+        }
+        .setting-toggle .switch::after{
+            content:'';
+            position:absolute;
+            width:20px;
+            height:20px;
+            border-radius:50%;
+            background:#5a5a5f;
+            top:2px;
+            left:2px;
+            box-shadow:0 1px 4px rgba(0,0,0,0.5);
+            transition:all .22s ease;
+        }
+        .setting-toggle input:checked + .switch{
+            background:#ff3b30;
+            border-color:#ff6b61;
+            box-shadow:0 0 12px rgba(255,59,48,0.55);
+            color:#1a0f0f;
+        }
+        .setting-toggle input:checked + .switch::before{
+            content:'ON';
+            color:#1a0f0f;
+            right:9px;
+        }
+        .setting-toggle input:checked + .switch::after{
+            transform:translateX(26px);
+            background:#fffaf7;
+        }
+        .setting-toggle:hover span:first-child{
+            color:#fff;
+            text-shadow:0 0 4px rgba(255,255,255,.3);
+        }
+
+        /* --- Settings toggle clarity override --- */
+        .setting-toggle span:first-child{flex:1; min-height:22px; line-height:22px; padding-right:10px;}
+        .setting-toggle .switch{
+            width:60px;
+            height:28px;
+            border-radius:16px;
+            background:#2f3034;
+            border:1px solid rgba(255,255,255,0.22);
+            position:relative;
+            cursor:pointer;
+            transition:all .22s ease;
+            box-shadow:inset 0 0 0 1px rgba(0,0,0,0.5);
+        }
+        .setting-toggle .switch::after{
+            content:'';
+            position:absolute;
+            width:26px;
+            height:24px;
+            border-radius:14px;
+            background:#6b6c72;
+            top:2px;
+            left:2px;
+            box-shadow:0 2px 6px rgba(0,0,0,0.65);
+            transition:all .22s ease;
+        }
+        .setting-toggle input:checked + .switch{
+            background:#ff4338;
+            border-color:#ff7a72;
+            box-shadow:0 0 16px rgba(255,67,56,0.7);
+        }
+        .setting-toggle input:checked + .switch::after{
+            transform:translateX(32px);
+            background:#fff;
+            box-shadow:0 2px 8px rgba(0,0,0,0.65);
+        }
+        .settings-grid{
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:10px 12px;
+        }
+        .settings-slider{
+            display:flex;
+            flex-direction:column;
+            gap:6px;
+            padding:2px 0;
+        }
+        .settings-slider__label{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            font-weight:600;
+            font-size:13px;
+            color:#e8e8e8;
+        }
+        .settings-slider input[type=range]{
+            -webkit-appearance:none;
+            appearance:none;
+            height:8px;
+            border-radius:999px;
+            background:linear-gradient(90deg,#ff6b61 0%, #ff3b30 100%);
+            outline:none;
+            box-shadow:inset 0 0 0 1px rgba(0,0,0,0.4);
+        }
+        .settings-slider input[type=range]::-webkit-slider-thumb{
+            -webkit-appearance:none;
+            appearance:none;
+            width:18px;
+            height:18px;
+            border-radius:50%;
+            background:#fff;
+            border:2px solid #ff3b30;
+            box-shadow:0 2px 6px rgba(0,0,0,0.55);
+            cursor:pointer;
+        }
+        .settings-slider input[type=range]::-moz-range-thumb{
+            width:18px;
+            height:18px;
+            border-radius:50%;
+            background:#fff;
+            border:2px solid #ff3b30;
+            box-shadow:0 2px 6px rgba(0,0,0,0.55);
+            cursor:pointer;
+        }
+        .settings-field{
+            display:flex;
+            flex-direction:column;
+            gap:6px;
+        }
+        .settings-field label{
+            color:#e8e8e8;
+            font-weight:600;
+            font-size:13px;
+        }
+        .settings-field .form-control{
+            background:#151517;
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:8px;
+            padding:8px 10px;
+            height:34px;
+        }
+        .settings-field .form-control:focus{
+            outline:none;
+            border-color:#d63c2e;
+            box-shadow:0 0 6px rgba(214,60,46,0.35);
+        }
+        /* Hotkey modal styling */
+        .keybinds-modal{
+            width:320px !important;
+            max-width:320px;
+            height:500px;
+            max-height:500px;
+        }
+        .keybinds-grid{
+            display:flex;
+            flex-direction:column;
+            gap:10px;
+        }
+        .keybind-row{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:12px;
+            padding:10px 12px;
+            background:rgba(255,255,255,0.03);
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:12px;
+            box-shadow:0 6px 20px rgba(0,0,0,0.35);
+        }
+        .keybind-label{
+            font-weight:600;
+            color:#f2f2f5;
+            font-size:13px;
+            letter-spacing:.2px;
+        }
+        .keybind-chip{
+            background:linear-gradient(135deg,rgba(255,255,255,0.12),rgba(255,255,255,0.04));
+            border:1px solid rgba(255,255,255,0.16);
+            border-radius:18px;
+            padding:7px 14px;
+            color:#fff;
+            font-weight:700;
+            font-size:12px;
+            letter-spacing:.4px;
+            cursor:pointer;
+            transition:all .18s ease;
+            min-width:120px;
+            text-align:center;
+        }
+        .keybind-chip:hover{
+            border-color:rgba(255,255,255,0.35);
+            box-shadow:0 0 12px rgba(255,255,255,0.12);
+            transform:translateY(-1px);
+        }
+        .keybind-chip.listening{
+            background:linear-gradient(135deg,rgba(255,79,63,0.28),rgba(255,59,48,0.22));
+            border-color:rgba(255,118,106,0.75);
+            box-shadow:0 0 16px rgba(255,79,63,0.45);
+        }
+        .keybinds-note{
+            color:rgba(255,255,255,0.8);
+            line-height:1.5;
+        }
+        .keybinds-actions{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:12px;
+            flex-wrap:wrap;
+        }
+        .keybinds-hint{
+            color:rgba(255,255,255,0.65);
+            font-size:12px;
+            letter-spacing:.2px;
+        }
+        #reset-keybinds{
+            padding:8px 12px;
+            background:rgba(255,255,255,0.08);
+            border:1px solid rgba(255,255,255,0.14);
+            border-radius:10px;
+            color:#fff;
+            font-weight:700;
+            letter-spacing:.3px;
+            cursor:pointer;
+            transition:all .18s ease;
+        }
+        #reset-keybinds:hover{
+            background:rgba(255,255,255,0.14);
+            border-color:rgba(255,255,255,0.24);
+            box-shadow:0 0 12px rgba(255,255,255,0.18);
+        }
+
+        /* Chatbox overlay */
+        #chatbox-container{
+            position:fixed;
+            display:flex;
+            flex-direction:column;
+            width:420px;
+            height:210px;
+            bottom:12px;
+            left:12px;
+            padding:10px;
+            background:rgba(10,10,12,0.7);
+            backdrop-filter:blur(5px);
+            border:1px solid rgba(255,255,255,0.05);
+            font-size:14px;
+            border-radius:6px;
+            box-shadow:0 8px 20px rgba(0,0,0,0.35);
+            color:#eaeaea;
+            z-index:50;
+            pointer-events:auto;
+            box-sizing:border-box;
+            gap:8px;
+        }
+        #chatbox-container * { box-sizing: border-box; }
+        #chatbox-container #message-list{
+            flex:1;
+            min-height:0;
+            overflow-y:auto;
+            overflow-x:hidden;
+            margin:0;
+            /* keep a comfortable gap above the input */
+            padding:6px 10px 12px 10px;
+            position:relative;
+            z-index:0;
+        }
+        /* custom scrollbar for chat */
+        #chatbox-container #message-list::-webkit-scrollbar{
+            width:8px;
+        }
+        #chatbox-container #message-list::-webkit-scrollbar-track{
+            background:rgba(255,255,255,0.04);
+            border-radius:4px;
+        }
+        #chatbox-container #message-list::-webkit-scrollbar-thumb{
+            background:rgba(255,255,255,0.18);
+            border-radius:4px;
+        }
+        #chatbox-container #message-list::-webkit-scrollbar-thumb:hover{
+            background:rgba(255,255,255,0.24);
+        }
+        #chatbox-input{
+            flex:0 0 auto;
+            padding:0;
+            background:rgba(10,10,12,0.9);
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:4px;
+            position:relative;
+            z-index:1;
+        }
+        #chatbox-input input{
+            width:100%;
+            font-size:14px;
+            line-height:1.3;
+            padding:8px 10px;
+            background:transparent;
+            border:0;
+            outline:0;
+            color:#eaeaea;
+            height:36px;
+        }
+        #chatbox-input input:focus{
+            border:0;
+            outline:0;
+        }
+        .chatbox-message{overflow:hidden;display:flex;line-height:1.3;margin-bottom:2px;}
+        .chatbox-message .sender{white-space:nowrap;margin-right:6px;font-weight:600;}
+        .chatbox-message .text{word-break:break-word;user-select:text;flex:1;}
+        .chatbox-message.system .text{color:#9aa0b5;}
+    </style>
+
+    <script>
+        // ========= original keybind / helper logic =========
+        const DEFAULT_BINDINGS = {
+            split: 32,
+            eject: 87,
+            minionSplit: 0,
+            minionEject: 0,
+            minionFreeze: 0,
+            minionCollect: 0,
+            minionFollow: 0,
+            multiSplitShift: 0,
+            multiSplitA: 0,
+            multiSplitD: 0,
+            doubleSplit: 0,
+            tripleSplit: 0,
+            quadSplit: 0,
+            split32: 0,
+            split64: 0,
+            diagonalLinesplit: 0,
+            lineLockToggle: 87,
+            teleportControl: 0,
+            respawn: 82
+        };
+        function loadBindings() {
+            try {
+                const stored = localStorage.getItem('mo_bindings');
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    ['minionSplit','minionEject','minionFreeze','minionCollect','minionFollow','multiSplitShift','multiSplitA','multiSplitD'].forEach(k => { delete parsed[k]; });
+                    return Object.assign({}, DEFAULT_BINDINGS, parsed);
+                }
+            } catch (e) {}
+            return Object.assign({}, DEFAULT_BINDINGS);
+        }
+        function saveBindings(b) {
+            try { localStorage.setItem('mo_bindings', JSON.stringify(b)); } catch (e) {}
+        }
+        let bindings = loadBindings();
+        function keyCodeToLabel(code) {
+            if (!code) return 'Unbound';
+            if (code === -1) return 'Mouse1';
+            if (code === -2) return 'Mouse2';
+            if (code === -3) return 'Mouse3';
+            if (code === 32) return 'Space';
+            if (code === 16) return 'Shift';
+            if (code >= 48 && code <= 90) return String.fromCharCode(code);
+            if (code >= 112 && code <= 123) return 'F' + (code - 111);
+            return 'Key(' + code + ')';
+        }
+        function mouseButtonToCode(btn) {
+            if (btn === 0) return -1;
+            if (btn === 1) return -2;
+            if (btn === 2) return -3;
+            return null;
+        }
+        function playWithSkin() {
+            var nickEl = document.getElementById('nick');
+            var skinEl = document.getElementById('skin');
+            var nick = nickEl ? (nickEl.value || '') : '';
+            var skin = skinEl ? skinEl.value.trim() : '';
+            var arg = nick;
+            if (skin) arg = '{' + skin + '}' + nick;
+            if (typeof play === 'function') play(arg);
+            return false;
+        }
+        function renderKeybindsUI() {
+            const actions = [
+                {id:'split', label:'Split'},
+                {id:'eject', label:'Eject Mass'},
+                {id:'doubleSplit', label:'Double Split (4 cells)'},
+                {id:'tripleSplit', label:'Triple Split (8 cells)'},
+                {id:'quadSplit', label:'Quad Split (16 cells)'},
+                {id:'split32', label:'32x Split'},
+                {id:'split64', label:'64x Split'},
+                {id:'diagonalLinesplit', label:'Diagonal Linesplit (8x straight)'},
+                {id:'lineLockToggle', label:'Line Lock Toggle'},
+                {id:'respawn', label:'Respawn'},
+                {id:'teleportControl', label:'Teleport-Control'}
+            ];
+            const list = document.getElementById('keybindsList');
+            if (!list) return;
+            list.innerHTML = '';
+            actions.forEach(a => {
+                const row = document.createElement('div');
+                row.className = 'keybind-row';
+                const label = document.createElement('div');
+                label.className = 'keybind-label';
+                label.textContent = a.label;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'keybind-chip';
+                btn.dataset.action = a.id;
+                btn.textContent = keyCodeToLabel(bindings[a.id] || 0);
+                btn.onclick = startListening;
+                row.appendChild(label);
+                row.appendChild(btn);
+                list.appendChild(row);
+            });
+        }
+        let listeningAction = null;
+        function startListening(e) {
+            e.preventDefault();
+            const btn = e.currentTarget;
+            listeningAction = btn.dataset.action;
+            document.querySelectorAll('.keybind-chip.listening').forEach(el => el.classList.remove('listening'));
+            btn.textContent = 'Press any key or mouse...';
+            btn.classList.add('listening');
+            window.addEventListener('keydown', captureKeybind);
+            window.addEventListener('mousedown', captureMousebind, true);
+        }
+        function captureKeybind(e) {
+            if (!listeningAction) return;
+            e.preventDefault();
+            const code = e.keyCode;
+            bindings[listeningAction] = code;
+            saveBindings(bindings);
+            listeningAction = null;
+            window.removeEventListener('keydown', captureKeybind);
+            window.removeEventListener('mousedown', captureMousebind, true);
+            renderKeybindsUI();
+            renderInstructions();
+            window.dispatchEvent(new Event('mo_bindings_updated'));
+        }
+        function captureMousebind(e) {
+            if (!listeningAction) return;
+            e.preventDefault();
+            const code = mouseButtonToCode(e.button);
+            if (code == null) return;
+            bindings[listeningAction] = code;
+            saveBindings(bindings);
+            listeningAction = null;
+            window.removeEventListener('keydown', captureKeybind);
+            window.removeEventListener('mousedown', captureMousebind, true);
+            renderKeybindsUI();
+            renderInstructions();
+            window.dispatchEvent(new Event('mo_bindings_updated'));
+        }
+        function renderInstructions() {
+            const el = document.getElementById('instructionsText');
+            if (!el) return;
+            el.innerHTML =
+                'Move your <b>Mouse</b> to control your cell<br/>' +
+                'Press <b>' + keyCodeToLabel(bindings.split) + '</b> to split<br/>' +
+                'Press <b>' + keyCodeToLabel(bindings.eject) + '</b> to eject mass<br/>' +
+                'Quick respawn: <b>' + keyCodeToLabel(bindings.respawn) + '</b>';
+        }
+        function resetKeybinds() {
+            bindings = Object.assign({}, DEFAULT_BINDINGS);
+            saveBindings(bindings);
+            renderKeybindsUI();
+            renderInstructions();
+        }
+
+        // ===== design logic: skins, servers, modals =====
+        let activeSkinCircle = null;
+        let currentPage = 0;
+        const itemsPerPage = 9;
+        const maxPages = 10;
+        let currentSkinIndex = 0;
+        let activeServerItem = null;
+        let skinProfiles = {}; // url -> {nick, tag}
+        function loadSkinProfiles() {
+            try { skinProfiles = JSON.parse(localStorage.getItem('mo_skin_profiles') || '{}') || {}; } catch (e) { skinProfiles = {}; }
+        }
+        function persistSkinProfiles() {
+            try { localStorage.setItem('mo_skin_profiles', JSON.stringify(skinProfiles)); } catch (e) {}
+        }
+        function getActiveSkinUrl() {
+            // Prefer the actively selected circle, then the input value.
+            if (activeSkinCircle) {
+                const u = activeSkinCircle.getAttribute('data-skin-url');
+                if (u) return u;
+            }
+            const skinInput = document.getElementById('skin');
+            let url = skinInput && skinInput.value ? skinInput.value.trim() : '';
+            return url;
+        }
+        function saveActiveSkinProfile() {
+            const url = getActiveSkinUrl();
+            if (!url) return;
+            // Keep a slot for this skin without altering global nick/tag.
+            skinProfiles[url] = skinProfiles[url] || {};
+            persistSkinProfiles();
+        }
+        
+        function applySkinProfile(url) {
+            // Nick/tag are global now; do not override them from skin profiles.
+            return;
+        }
+
+        function updateSkinPreview(url) {
+            const skinPreview = document.getElementById('skinPreview');
+            if (!skinPreview) return;
+            skinPreview.classList.add('transition');
+            setTimeout(function () {
+                skinPreview.style.backgroundImage = url ? "url('" + url + "')" : '';
+                skinPreview.classList.remove('transition');
+            }, 150);
+        }
+        function showRegionTab(tabName) {
+            const tabs = document.querySelectorAll('#regionTabs ~ .tab-content');
+            const buttons = document.querySelectorAll('#regionTabs .tab-button');
+            tabs.forEach(t => t.classList.remove('active'));
+            buttons.forEach(b => b.classList.remove('active'));
+            const target = document.getElementById(tabName);
+            if (target) target.classList.add('active');
+            const btn = document.querySelector("#regionTabs [onclick=\"showRegionTab('" + tabName + "')\"]");
+            if (btn) btn.classList.add('active');
+        }
+        function showFeatureTab(tabName) {
+            const tabs = document.querySelectorAll('#featureTabs ~ .tab-content');
+            const buttons = document.querySelectorAll('#featureTabs .tab-button');
+            tabs.forEach(t => t.classList.remove('active'));
+            buttons.forEach(b => b.classList.remove('active'));
+            const target = document.getElementById(tabName);
+            if (target) target.classList.add('active');
+            const btn = document.querySelector("#featureTabs [onclick=\"showFeatureTab('" + tabName + "')\"]");
+            if (btn) btn.classList.add('active');
+        }
+        function toggleDropdown(header) {
+            const list = header.nextElementSibling;
+            header.classList.toggle('active');
+            list.classList.toggle('active');
+        }
+        function selectSkin(el) {
+            // save profile for previous active skin before switching
+            saveActiveSkinProfile();
+            if (activeSkinCircle) activeSkinCircle.classList.remove('active');
+            activeSkinCircle = el;
+            activeSkinCircle.classList.add('active');
+            const url = el.getAttribute('data-skin-url') || '';
+            updateSkinPreview(url);
+            const skinInput = document.getElementById('skin');
+            if (skinInput) {
+                skinInput.value = url;
+                try { localStorage.setItem('mo_skin', url); } catch (e) {}
+                try { skinInput.dispatchEvent(new Event('blur', {bubbles:true})); } catch (e) {}
+            }
+            const allSkins = Array.from(document.querySelectorAll('.skin-circle'));
+            currentSkinIndex = allSkins.indexOf(el);
+            try { localStorage.setItem('activeSkinUrl', url); } catch (e) {}
+            applySkinProfile(url);
+        }
+        function updateSkinPreviewAndCircle(url) {
+            updateSkinPreview(url);
+            const skinInput = document.getElementById('skin');
+            if (skinInput) {
+                skinInput.value = url;
+                try { localStorage.setItem('mo_skin', url); } catch (e) {}
+            }
+            if (activeSkinCircle) {
+                activeSkinCircle.setAttribute('data-skin-url', url);
+                activeSkinCircle.style.backgroundImage = url ? "url('" + url + "')" : '';
+                try { localStorage.setItem('activeSkinUrl', url); } catch (e) {}
+            }
+            applySkinProfile(url);
+            saveSkinsToStorage();
+        }
+        function cycleSkin(dir) {
+            const allSkins = Array.from(document.querySelectorAll('.skin-circle'));
+            if (!allSkins.length) return;
+            currentSkinIndex = (currentSkinIndex + dir + allSkins.length) % allSkins.length;
+            selectSkin(allSkins[currentSkinIndex]);
+            const newPage = Math.floor(currentSkinIndex / itemsPerPage);
+            if (newPage !== currentPage) {
+                currentPage = newPage;
+                updateCarousel();
+            }
+        }
+        function selectServer(el) {
+            if (activeServerItem) activeServerItem.classList.remove('active');
+            activeServerItem = el;
+            activeServerItem.classList.add('active');
+            const addr = el.getAttribute('data-address');
+            const gm = document.getElementById('gamemode');
+            if (gm && addr) gm.value = addr;
+            if (typeof setServer === 'function' && addr) setServer(addr);
+        }
+        function syncServerDropdown() {
+            const gm = document.getElementById('gamemode');
+            if (!gm) return;
+            const prev = gm.value;
+            gm.innerHTML = '<option selected disabled>Servers:</option>';
+            document.querySelectorAll('.server-item').forEach(function(item) {
+                const addr = item.getAttribute('data-address');
+                if (!addr) return;
+                const opt = document.createElement('option');
+                opt.value = addr;
+                opt.textContent = item.textContent.trim() || addr;
+                gm.appendChild(opt);
+            });
+            if (prev) gm.value = prev;
+        }
+        function injectGamemodeServers() {
+            const euTab = document.getElementById('eu');
+            if (!euTab) return;
+            // Map gamemodes to their dedicated ports on localhost.
+            const modes = [
+                {name: "Teams", addr: "127.0.0.1:471"},
+                {name: "Experimental", addr: "127.0.0.1:472"},
+                {name: "Rainbow FFA", addr: "127.0.0.1:473"},
+                {name: "Tournament", addr: "127.0.0.1:474"},
+                {name: "HungerGames", addr: "127.0.0.1:475"}
+            ];
+            const group = document.createElement('div');
+            group.className = 'server-group';
+            const header = document.createElement('div');
+            header.className = 'server-header';
+            header.textContent = 'Gamemodes';
+            header.onclick = function(){toggleDropdown(header);};
+            const list = document.createElement('div');
+            list.className = 'server-list';
+            modes.forEach(function(entry) {
+                const item = document.createElement('div');
+                item.className = 'server-item';
+                item.setAttribute('data-address', entry.addr);
+                item.onclick = function(){selectServer(item);};
+                item.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>' +
+                    entry.name + '<span class="player-count">--/--</span>';
+                list.appendChild(item);
+            });
+            group.appendChild(header);
+            group.appendChild(list);
+            euTab.appendChild(group);
+        }
+        function updateCarousel() {
+            const pages = document.querySelectorAll('.skins-page');
+            const pagesContainer = document.getElementById('skinsPages');
+            const dotsContainer = document.getElementById('carouselDots');
+            if (!pagesContainer || !dotsContainer || !pages.length) return;
+            currentPage = Math.min(Math.max(currentPage, 0), pages.length - 1);
+            pagesContainer.style.transform = 'translateX(-' + (currentPage * 100) + '%)';
+            dotsContainer.innerHTML = '';
+            for (let i = 0; i < pages.length; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'carousel-dot';
+                if (i === currentPage) dot.classList.add('active');
+                (function (idx) {
+                    dot.addEventListener('click', function () {
+                        currentPage = idx;
+                        updateCarousel();
+                    });
+                })(i);
+                dotsContainer.appendChild(dot);
+            }
+        }
+        function addSkin() {
+            const count = document.querySelectorAll('.skin-circle').length;
+            if (count >= maxPages * itemsPerPage) return;
+            const container = document.getElementById('skinsPages');
+            let pages = document.querySelectorAll('.skins-page');
+            let target = null;
+            for (let i = 0; i < pages.length; i++) {
+                if (pages[i].querySelectorAll('.skin-circle').length < itemsPerPage) {
+                    target = pages[i]; break;
+                }
+            }
+            if (!target) {
+                target = document.createElement('div');
+                target.className = 'skins-page';
+                container.appendChild(target);
+            }
+            const addBtn = target.querySelector('.add-skin');
+            if (addBtn) addBtn.remove();
+            const url = 'https://via.placeholder.com/80/CCCCCC';
+            const skin = document.createElement('div');
+            skin.className = 'skin-circle';
+            skin.setAttribute('data-skin-url', url);
+            skin.style.backgroundImage = "url('" + url + "')";
+            skin.addEventListener('click', function(){selectSkin(skin);});
+            skin.addEventListener('dblclick', function(){removeSkin(skin);});
+            target.appendChild(skin);
+            pages = document.querySelectorAll('.skins-page');
+            let addedBtn = false;
+            for (let i = pages.length - 1; i >= 0; i--) {
+                const items = pages[i].querySelectorAll('.skin-circle');
+                if (items.length < itemsPerPage && count + 1 < maxPages * itemsPerPage) {
+                    const b = document.createElement('div');
+                    b.className = 'add-skin';
+                    b.textContent = '+';
+                    b.addEventListener('click', addSkin);
+                    pages[i].appendChild(b);
+                    addedBtn = true;
+                    break;
+                }
+            }
+            if (!addedBtn && pages.length < maxPages) {
+                const page = document.createElement('div');
+                page.className = 'skins-page';
+                const b = document.createElement('div');
+                b.className = 'add-skin';
+                b.textContent = '+';
+                b.addEventListener('click', addSkin);
+                page.appendChild(b);
+                container.appendChild(page);
+            }
+            saveSkinsToStorage();
+            updateCarousel();
+        }
+        function removeSkin(el) {
+            const allSkins = Array.from(document.querySelectorAll('.skin-circle'));
+            const idx = allSkins.indexOf(el);
+            if (idx === -1) return;
+            if (activeSkinCircle === el) {
+                activeSkinCircle = null;
+                if (allSkins.length > 1) {
+                    const nextIdx = idx === allSkins.length - 1 ? idx - 1 : idx;
+                    selectSkin(allSkins[nextIdx]);
+                } else {
+                    updateSkinPreview('');
+                    const skinInput = document.getElementById('skin');
+                    if (skinInput) skinInput.value = '';
+                    try { localStorage.removeItem('activeSkinUrl'); } catch (e) {}
+                }
+            }
+            const page = el.closest('.skins-page');
+            el.remove();
+            if (page && !page.querySelector('.skin-circle')) page.remove();
+            const pages = document.querySelectorAll('.skins-page');
+            if (!pages.length) {
+                const cont = document.getElementById('skinsPages');
+                const newPage = document.createElement('div');
+                newPage.className = 'skins-page';
+                const btn = document.createElement('div');
+                btn.className = 'add-skin';
+                btn.textContent = '+';
+                btn.addEventListener('click', addSkin);
+                newPage.appendChild(btn);
+                cont.appendChild(newPage);
+            } else if (!document.querySelector('.add-skin') && allSkins.length - 1 < maxPages * itemsPerPage) {
+                const last = pages[pages.length - 1];
+                if (last.querySelectorAll('.skin-circle').length < itemsPerPage) {
+                    const btn = document.createElement('div');
+                    btn.className = 'add-skin';
+                    btn.textContent = '+';
+                    btn.addEventListener('click', addSkin);
+                    last.appendChild(btn);
+                }
+            }
+            saveSkinsToStorage();
+            updateCarousel();
+        }
+        function saveSkinsToStorage() {
+            const arr = Array.from(document.querySelectorAll('.skin-circle')).map(el => el.getAttribute('data-skin-url') || '');
+            try { localStorage.setItem('skins', JSON.stringify(arr)); } catch (e) {}
+        }
+        function loadSkinsFromStorage() {
+            let saved = [];
+            try { saved = JSON.parse(localStorage.getItem('skins') || '[]'); } catch (e) { saved = []; }
+            const defaults = [
+                'https://via.placeholder.com/80/FF0000',
+                'https://via.placeholder.com/80/00FF00',
+                'https://via.placeholder.com/80/0000FF',
+                'https://via.placeholder.com/80/FFFF00',
+                'https://via.placeholder.com/80/FF00FF',
+                'https://via.placeholder.com/80/00FFFF',
+                'https://via.placeholder.com/80/FFA500',
+                'https://via.placeholder.com/80/800080'
+            ];
+            const list = saved.length ? saved : defaults;
+            const cont = document.getElementById('skinsPages');
+            if (!cont) return;
+            cont.innerHTML = '';
+            let page = null;
+            list.forEach(function (url, i) {
+                if (i % itemsPerPage === 0) {
+                    page = document.createElement('div');
+                    page.className = 'skins-page';
+                    cont.appendChild(page);
+                }
+                const skin = document.createElement('div');
+                skin.className = 'skin-circle';
+                skin.setAttribute('data-skin-url', url);
+                skin.style.backgroundImage = "url('" + url + "')";
+                skin.addEventListener('click', function(){selectSkin(skin);});
+                skin.addEventListener('dblclick', function(){removeSkin(skin);});
+                page.appendChild(skin);
+            });
+            const pages = document.querySelectorAll('.skins-page');
+            if (list.length < maxPages * itemsPerPage) {
+                let last = pages[pages.length - 1];
+                if (!last) {
+                    last = document.createElement('div');
+                    last.className = 'skins-page';
+                    cont.appendChild(last);
+                }
+                if (last.querySelectorAll('.skin-circle').length < itemsPerPage) {
+                    const btn = document.createElement('div');
+                    btn.className = 'add-skin';
+                    btn.textContent = '+';
+                    btn.addEventListener('click', addSkin);
+                    last.appendChild(btn);
+                }
+            }
+            updateCarousel();
+        }
+
+        function saveInputs() {
+            const n = document.getElementById('nick');
+            const t = document.getElementById('tag');
+            if (n) try { localStorage.setItem('nickname', n.value); } catch(e){}
+            if (t) try { localStorage.setItem('tag', t.value); } catch(e){}
+            saveActiveSkinProfile();
+        }
+        function loadInputs() {
+            const n = document.getElementById('nick');
+            const t = document.getElementById('tag');
+            if (n) try { n.value = localStorage.getItem('nickname') || ''; } catch(e){}
+            if (t) try { t.value = localStorage.getItem('tag') || ''; } catch(e){}
+        }
+
+        function syncSettingsModal(){
+            var toggles = document.querySelectorAll('#settings-modal input[type="checkbox"].save');
+            var s = (window.__clientSettings || window.settings || (typeof settings === 'object' && settings) || {});
+            toggles.forEach(function(el){
+                var oc = (el.getAttribute('onchange') || '');
+                var fallback = el.checked;
+                var checked = fallback;
+                // map toggle to current settings (account for inverted setters)
+                if (oc.indexOf('setSkins') !== -1) checked = s.showSkins !== false;
+                else if (oc.indexOf('setNames') !== -1) checked = s.showNames !== false;
+                else if (oc.indexOf('setColors') !== -1) checked = s.showColor !== false;
+                else if (oc.indexOf('setShowMass') !== -1) checked = !!s.showMass;
+                else if (oc.indexOf('setCellBorder') !== -1) checked = !!s.cellBorders;
+                else if (oc.indexOf('setJelly') !== -1) checked = !!s.jellyPhysics;
+                else if (oc.indexOf('setTextOutline') !== -1) checked = s.showTextOutline !== false;
+                else if (oc.indexOf('setZoom') !== -1) checked = !!s.infiniteZoom;
+                else if (oc.indexOf('setTransparency') !== -1) checked = !!s.transparency;
+                else if (oc.indexOf('setFood') !== -1) checked = !!s.hideFood;
+                else if (oc.indexOf('setChatHide') !== -1) checked = s.hideChat === undefined ? fallback : !s.hideChat;
+                else if (oc.indexOf('setMinimap') !== -1) checked = s.showMinimap !== false;
+                else if (oc.indexOf('setGrid') !== -1) checked = s.hideGrid === undefined ? fallback : !s.hideGrid;
+                else if (oc.indexOf('setMapBorders') !== -1) checked = !!s.mapBorders;
+                else if (oc.indexOf('setSectors') !== -1) checked = !!s.sectors;
+                else if (oc.indexOf('setCellPos') !== -1) checked = !!s.showPos;
+                else if (oc.indexOf('setStats') !== -1) checked = s.hideStats === undefined ? fallback : !s.hideStats;
+                else if (oc.indexOf('setDarkTheme') !== -1) checked = !!s.darkTheme;
+                else if (oc.indexOf('setAutoZoom') !== -1) checked = !!s.autoZoom;
+                else if (oc.indexOf('setAutoRespawn') !== -1) checked = !!s.autoRespawn;
+                el.checked = !!checked;
+            });
+            [
+                {id:'drawDelay', value: s.drawDelayMs, format: function(v){ return Math.round(v||0) + ' ms'; }},
+                {id:'cameraPanSpeed', value: s.cameraPanSpeed, format: function(v){ return Math.round(v||0) + '%'; }},
+                {id:'cameraZoomSpeed', value: s.cameraZoomSpeed, format: function(v){ return Math.round(v||0) + '%'; }},
+                {id:'scrollZoomRate', value: s.scrollZoomRate, format: function(v){ return Math.round(v||0) + '%'; }}
+            ].forEach(function(item){
+                var input = document.getElementById(item.id);
+                var label = document.getElementById(item.id + 'Value');
+                if (input && item.value != null) input.value = item.value;
+                if (label) label.textContent = item.format(item.value || 0);
+            });
+        }
+        function bindSettingsSlider(id, formatter, setter, settingKey){
+            var input = document.getElementById(id);
+            var label = document.getElementById(id + 'Value');
+            if (!input) return;
+            var updateLabel = function(val){
+                if (label) label.textContent = formatter(val);
+            };
+            var applyValue = function(val){
+                var num = isNaN(Number(val)) ? Number(input.value) : Number(val);
+                input.value = num;
+                updateLabel(num);
+                if (typeof setter === 'function') setter(num);
+                else {
+                    var s = (window.__clientSettings || window.settings || {});
+                    if (s && settingKey) s[settingKey] = num;
+                }
+            };
+            input.addEventListener('input', function(e){ updateLabel(Number(e.target.value)); });
+            input.addEventListener('change', function(e){ applyValue(Number(e.target.value)); });
+            var settingsSrc = (window.__clientSettings || window.settings || {});
+            var initial = (settingsSrc && settingsSrc[settingKey] != null) ? settingsSrc[settingKey] : Number(input.value);
+            applyValue(initial);
+        }
+        function openModal(id){
+            var el=document.getElementById(id);
+            if(el){
+                if(id==='settings-modal') syncSettingsModal();
+                el.classList.add('active');
+            }
+        }
+        function closeModal(id){var el=document.getElementById(id);if(el)el.classList.remove('active');}
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // keybind UI
+            renderKeybindsUI();
+            renderInstructions();
+            const resetBtn = document.getElementById('reset-keybinds');
+            if (resetBtn) resetBtn.addEventListener('click', function(e){e.preventDefault();resetKeybinds();});
+            loadSkinProfiles();
+            injectGamemodeServers();
+            syncServerDropdown();
+
+            // skin persistence
+            loadSkinsFromStorage();
+            loadInputs();
+            let savedSkinUrl = null;
+            try { savedSkinUrl = localStorage.getItem('activeSkinUrl'); } catch(e){}
+            const allSkins = Array.from(document.querySelectorAll('.skin-circle'));
+            if (savedSkinUrl && allSkins.length) {
+                const found = allSkins.find(el => el.getAttribute('data-skin-url') === savedSkinUrl);
+                if (found) selectSkin(found); else selectSkin(allSkins[0]);
+            } else if (allSkins.length) {
+                selectSkin(allSkins[0]);
+            }
+            applySkinProfile(getActiveSkinUrl());
+
+            const nick = document.getElementById('nick');
+            const tag = document.getElementById('tag');
+            if (nick) {
+                nick.addEventListener('input', function(){ saveInputs(); saveActiveSkinProfile(); });
+                nick.addEventListener('blur', saveActiveSkinProfile);
+            }
+            if (tag) {
+                tag.addEventListener('input', function(){ saveInputs(); saveActiveSkinProfile(); });
+                tag.addEventListener('blur', saveActiveSkinProfile);
+            }
+            window.addEventListener('beforeunload', saveActiveSkinProfile);
+
+            // Preselect the Cloudflare tunnel as default server
+            const defaultServer = document.querySelector('.server-item[data-address="game.linkease.me:443"]');
+            if (defaultServer) selectServer(defaultServer);
+
+            bindSettingsSlider('drawDelay', function(v){ return Math.round(v) + ' ms'; }, function(v){ if (window.setDrawDelay) window.setDrawDelay(v); }, 'drawDelayMs');
+            bindSettingsSlider('cameraPanSpeed', function(v){ return Math.round(v) + '%'; }, function(v){ if (window.setCameraPanSpeed) window.setCameraPanSpeed(v); }, 'cameraPanSpeed');
+            bindSettingsSlider('cameraZoomSpeed', function(v){ return Math.round(v) + '%'; }, function(v){ if (window.setCameraZoomSpeed) window.setCameraZoomSpeed(v); }, 'cameraZoomSpeed');
+            bindSettingsSlider('scrollZoomRate', function(v){ return Math.round(v) + '%'; }, function(v){ if (window.setScrollZoomRate) window.setScrollZoomRate(v); }, 'scrollZoomRate');
+
+            const playBtn = document.getElementById('play-btn');
+            if (playBtn) playBtn.addEventListener('click', function(e){e.preventDefault();playWithSkin();});
+
+            const skinInput = document.getElementById('skin');
+            if (skinInput) {
+                // load stored mo_skin if exists
+                try {
+                    const stored = localStorage.getItem('mo_skin');
+                    if (stored) {
+                        skinInput.value = stored;
+                        updateSkinPreviewAndCircle(stored);
+                    }
+                } catch(e){}
+                skinInput.addEventListener('input', function(){updateSkinPreviewAndCircle(skinInput.value);});
+                skinInput.addEventListener('blur', function(){
+                    try {
+                        let skin = (skinInput.value || "").trim();
+                        try { localStorage.setItem('mo_skin', skin); } catch (e) {}
+                        updateSkinPreviewAndCircle(skin);
+                        saveActiveSkinProfile();
+                        sendSetNickSkin(buildNamePayload());
+                    } catch (e) {}
+                });
+                // Ensure preview paints on initial load using whatever value is present
+                if (skinInput.value) updateSkinPreviewAndCircle(skinInput.value);
+            }
+        });
+    </script>
+</head>
+<body>
+    <!-- old error modal kept -->
+    <div class="modal fade" id="inPageModal" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 id="inPageModalTitle" class="modal-title">Failed to Load</h4>
+                </div>
+                <div id="inPageModalBody" class="modal-body">
+                    <p>Failed to load. Please check your connection!</p>
+                    <div class="center">
+                        <div class="loader"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="overlays">
+        <div id="helloDialog">
+            <div>
+                <h2 id="title" style="color:#ff020200;text-align:center;margin-bottom:16px;">MultiOgar Client</h2>
+
+                <div class="game-ui-wrapper">
+                    <!-- LEFT: regions/servers -->
+                    <div class="glass-card full-height">
+                        <div class="tab-buttons" id="regionTabs">
+                            <button class="tab-button active" onclick="showRegionTab('eu')">EU</button>
+                            <button class="tab-button" onclick="showRegionTab('na')">NA</button>
+                            <button class="tab-button" onclick="showRegionTab('as')">AS</button>
+                        </div>
+
+                        <div id="eu" class="tab-content active">
+                            <div class="server-group">
+                                <div class="server-header" onclick="toggleDropdown(this)">Tournaments</div>
+                                <div class="server-list">
+                                    <div class="server-item" data-address="game.linkease.me:443" onclick="selectServer(this)">
+                                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                        Main Tunnel
+                                        <span class="player-count">00/25</span>
+                                    </div>
+                                    <div class="server-item" data-address="game.linkease.me:443" onclick="selectServer(this)">
+                                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                        Main Tunnel (Alt)
+                                        <span class="player-count">00/25</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="server-group">
+                                <div class="server-header" onclick="toggleDropdown(this)">Localhost</div>
+                                <div class="server-list">
+                                    <div class="server-item" data-address="game.linkease.me:443" onclick="selectServer(this)">
+                                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                        Tunnel 443
+                                        <span class="player-count">00/25</span>
+                                    </div>
+                                    <div class="server-item" data-address="game.linkease.me:443" onclick="selectServer(this)">
+                                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                        Tunnel (Backup)
+                                        <span class="player-count">00/25</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="na" class="tab-content">
+                            <div class="server-group">
+                                <div class="server-header" onclick="toggleDropdown(this)">NA Servers</div>
+                                <div class="server-list">
+                                    <div class="server-item" data-address="127.0.0.1:450" onclick="selectServer(this)">
+                                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                        NA 1
+                                        <span class="player-count">00/25</span>
+                                    </div>
+                                    <div class="server-item" data-address="127.0.0.1:451" onclick="selectServer(this)">
+                                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                        NA 2
+                                        <span class="player-count">00/25</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="as" class="tab-content">
+                            <div class="server-group">
+                                <div class="server-header" onclick="toggleDropdown(this)">AS Servers</div>
+                                <div class="server-list">
+                                    <div class="server-item" data-address="127.0.0.1:460" onclick="selectServer(this)">
+                                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                        AS 1
+                                        <span class="player-count">00/25</span>
+                                    </div>
+                                    <div class="server-item" data-address="127.0.0.1:461" onclick="selectServer(this)">
+                                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                        AS 2
+                                        <span class="player-count">00/25</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MIDDLE: play panel -->
+                    <div class="glass-card full-height">
+                        <div class="top-icons">
+                            <button title="Settings" onclick="openModal('settings-modal')">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09c.7 0 1.3-.4 1.51-1a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .7.4 1.3 1 1.51a1.65 1.65 0 0 0 1.82-.33l-.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.18c0 .7.4 1.3 1 1.51H21a2 2 0 0 1 0 4h-.09c-.7 0-1.3.4-1.51 1z"/></svg>
+                            </button>
+                            <button title="Palette" onclick="openModal('palette-modal')">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="6.5" cy="9.5" r="1.5"/><circle cx="17.5" cy="9.5" r="1.5"/><circle cx="12" cy="14.5" r="1.5"/></svg>
+                            </button>
+                            <button title="Keyboard" onclick="openModal('keyboard-modal')">
+                                <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg>
+                            </button>
+                            <button title="Camera" onclick="openModal('camera-modal')">
+                                <svg viewBox="0 0 24 24"><path d="M15 10l4.55-2.27A2 2 0 0 1 22 9.618v4.764a2 2 0 0 1-2.45 1.887L15 14"/><rect x="2" y="6" width="13" height="12" rx="2" ry="2"/></svg>
+                            </button>
+                            <button title="Clipboard" onclick="openModal('clipboard-modal')">
+                                <svg viewBox="0 0 24 24"><path d="M16 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><rect x="9" y="2" width="6" height="4" rx="1" ry="1"/></svg>
+                            </button>
+                        </div>
+
+                        <div class="avatar-container">
+                            <button class="avatar-button left" onclick="cycleSkin(-1)">◀</button>
+                            <div id="skinPreview"></div>
+                            <button class="avatar-button right" onclick="cycleSkin(1)">▶</button>
+                        </div>
+
+                        <div class="input-row">
+                            <input id="nick" class="save" data-box-id="0" placeholder="Nickname" maxlength="30">
+                            <input id="tag" placeholder="Tag (unused)">
+                        </div>
+                        <div class="skin-input">
+                            <input id="skin" placeholder="Paste skin URL..." maxlength="512">
+                        </div>
+                        <div class="play-section">
+                            <button id="play-btn" class="play-btn btn-needs-server">▶ Play</button>
+                            <button id="spectate-btn" class="btn-needs-server" onclick="spectate();return false;" title="Spectate">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M22 12s-4-8-10-8-10 8-10 8 4 8 10 8 10-8 10-8z"/></svg>
+                            </button>
+                        </div>
+
+                        <!-- hidden select used by main_out.js -->
+                        <select id="gamemode" style="display:none;" onchange="setServer($(this).val());">
+                            <option selected disabled>Servers:</option>
+                            <option value="game.linkease.me:443">Tunnel 443</option>
+                            <option value="game.linkease.me:443">Tunnel (Alt)</option>
+                        </select>
+                    </div>
+
+                    <!-- RIGHT: profile + skins -->
+                    <div class="right-column">
+                        <div class="profile-card">
+                            <div style="position: relative; height:100%;">
+                                <div style="position:absolute;top:12px;right:12px;cursor:pointer;">
+                                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="white" fill="none"><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/><path d="M13 5v-2a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v18a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2"/></svg>
+                                </div>
+                                <div style="display:flex;gap:12px;align-items:center;">
+                                    <div class="profile-picture"></div>
+                                    <div style="display:flex;flex-direction:column;gap:2px;">
+                                        <div style="font-weight:600;color:#fff;font-size:15px;">DiscordUser#1234</div>
+                                        <div style="font-size:12px;color:rgba(255,255,255,.7);">1,234,567 total XP</div>
+                                        <div style="font-size:12px;color:rgba(255,255,255,.7);">23,456 season XP</div>
+                                    </div>
+                                </div>
+                                <div style="position:absolute;left:0;right:0;bottom:22px;background:rgba(255,255,255,.1);border-radius:8px;overflow:hidden;height:20px;">
+                                    <div style="width:45%;background:#fff;height:100%;border-radius:8px 0 0 8px;"></div>
+                                </div>
+                                <div style="position:absolute;left:0;right:0;bottom:0;font-size:12px;display:flex;justify-content:space-between;color:rgba(255,255,255,.6);">
+                                    <span>Level 234</span><span>5522500</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-section">
+                            <div class="tab-buttons" id="featureTabs">
+                                <button class="tab-button active" onclick="showFeatureTab('skinsTab')">Skins</button>
+                                <button class="tab-button" onclick="showFeatureTab('perksTab')">Perks</button>
+                            </div>
+                            <div id="skinsTab" class="tab-content active">
+                                <div class="skins-container">
+                                    <div class="skins-pages" id="skinsPages"></div>
+                                </div>
+                                <div class="carousel-dots" id="carouselDots"></div>
+                            </div>
+                            <div id="perksTab" class="tab-content">
+                                <div style="display:flex;flex-direction:column;gap:8px;">
+                                    <div>
+                                        <label style="color:rgba(255,255,255,.9);font-weight:600;">Hat URL</label>
+                                        <input class="form-control" id="hatUrl" placeholder="Preset (e.g. crown) or full image URL" value="" style="width:100%;background:rgba(255,255,255,.08);color:#fff;border:none;">
+                                        <small style="color:rgba(255,255,255,.65);">Applied locally as a perk; does not change your name.</small>
+                                    </div>
+                                    <div class="settings-field">
+                                        <label>Name text color</label>
+                                        <input class="form-control" id="nameColor" placeholder="Default HEX = FFF" value="">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- overlay modals -->
+                    <div id="settings-modal" class="overlay-modal settings-modal">
+                        <div class="modal-header">
+                            <h2>Settings</h2>
+                            <button class="close-modal" onclick="closeModal('settings-modal')">×</button>
+                        </div>
+                        <div class="modal-content settings-content">
+                            <div class="settings-group">
+                                <div class="settings-group__title">Cells</div>
+                                <div class="settings-card">
+                                    <label class="setting-toggle">
+                                        <span>Show skins</span>
+                                        <input type="checkbox" class="save" data-box-id="1" onchange="setSkins(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show other skins</span>
+                                        <input type="checkbox" class="save" data-box-id="19" onchange="setOtherSkins(this.checked);" checked>
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show names</span>
+                                        <input type="checkbox" class="save" data-box-id="2" onchange="setNames(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show other names</span>
+                                        <input type="checkbox" class="save" data-box-id="20" onchange="setOtherNames(this.checked);" checked>
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show colors</span>
+                                        <input type="checkbox" class="save" data-box-id="4" onchange="setColors(!this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show mass</span>
+                                        <input type="checkbox" class="save" data-box-id="5" onchange="setShowMass(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show cell borders</span>
+                                        <input type="checkbox" class="save" data-box-id="9" onchange="setCellBorder(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Jelly physics</span>
+                                        <input type="checkbox" class="save" data-box-id="18" onchange="setJelly(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Text outline</span>
+                                        <input type="checkbox" class="save" data-box-id="16" onchange="setTextOutline(this.checked);" checked>
+                                        <span class="switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <div class="settings-group__title">HUD</div>
+                                <div class="settings-card">
+                                    <label class="setting-toggle">
+                                        <span>Show leaderboard</span>
+                                        <input type="checkbox" class="save" data-box-id="13" onchange="setStats(!this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show minimap</span>
+                                        <input type="checkbox" class="save" data-box-id="8" onchange="setMinimap(!this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show minimap borders</span>
+                                        <input type="checkbox" class="save" data-box-id="14" onchange="setMapBorders(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show minimap sectors</span>
+                                        <input type="checkbox" class="save" data-box-id="15" onchange="setSectors(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show cell position</span>
+                                        <input type="checkbox" class="save" data-box-id="16" onchange="setCellPos(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show grid</span>
+                                        <input type="checkbox" class="save" data-box-id="10" onchange="setGrid(!this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Show stats</span>
+                                        <input type="checkbox" class="save" data-box-id="13" onchange="setStats(!this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <div class="settings-group__title">Gameplay</div>
+                                <div class="settings-card">
+                                    <label class="setting-toggle">
+                                        <span>Dark theme</span>
+                                        <input type="checkbox" class="save" data-box-id="3" onchange="setDarkTheme(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Infinite zoom</span>
+                                        <input type="checkbox" class="save" data-box-id="11" onchange="setZoom(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Transparent cells</span>
+                                        <input type="checkbox" class="save" data-box-id="12" onchange="setTransparency(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Hide food</span>
+                                        <input type="checkbox" class="save" data-box-id="17" onchange="setFood(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <div class="settings-group__title">Camera</div>
+                                <div class="settings-card">
+                                    <label class="setting-toggle">
+                                        <span>Auto zoom</span>
+                                        <input type="checkbox" class="save" data-box-id="21" onchange="setAutoZoom(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <label class="setting-toggle">
+                                        <span>Auto respawn</span>
+                                        <input type="checkbox" class="save" data-box-id="22" onchange="setAutoRespawn(this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                    <div class="settings-slider">
+                                        <div class="settings-slider__label">Draw delay <span id="drawDelayValue"></span></div>
+                                        <input type="range" id="drawDelay" min="0" max="400" step="10" value="120">
+                                    </div>
+                                    <div class="settings-slider">
+                                        <div class="settings-slider__label">Camera panning speed <span id="cameraPanSpeedValue"></span></div>
+                                        <input type="range" id="cameraPanSpeed" min="1" max="200" step="1" value="22">
+                                    </div>
+                                    <div class="settings-slider">
+                                        <div class="settings-slider__label">Camera zooming speed <span id="cameraZoomSpeedValue"></span></div>
+                                        <input type="range" id="cameraZoomSpeed" min="1" max="200" step="1" value="14">
+                                    </div>
+                                    <div class="settings-slider">
+                                        <div class="settings-slider__label">Scroll zoom rate <span id="scrollZoomRateValue"></span></div>
+                                        <input type="range" id="scrollZoomRate" min="10" max="400" step="5" value="100">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <div class="settings-group__title">Chat</div>
+                                <div class="settings-card">
+                                    <label class="setting-toggle">
+                                        <span>Show chat</span>
+                                        <input type="checkbox" class="save" data-box-id="7" onchange="setChatHide(!this.checked);">
+                                        <span class="switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <div class="settings-group__title">Colors & Audio</div>
+                                <div class="settings-card settings-grid">
+                                    <div class="settings-field">
+                                        <label>LB text color (you)</label>
+                                        <input class="form-control" id="lbColor" placeholder="Default HEX = FAA" value="">
+                                    </div>
+                                    <div class="settings-field">
+                                        <label>Cell border color</label>
+                                        <input class="form-control" id="cellBorderColor" placeholder="Default HEX = 000" value="">
+                                    </div>
+                                    <div class="settings-field">
+                                        <label>Sound volume</label>
+                                        <input class="form-control" id="soundsVolume" placeholder="Default = 0.5 | Max = 1" value="" step="0.1" type="number" min="0" max="1">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="palette-modal" class="overlay-modal">
+                        <div class="modal-header">
+                            <h2>Palette</h2>
+                            <button class="close-modal" onclick="closeModal('palette-modal')">×</button>
+                        </div>
+                        <div class="modal-content">
+                            <p>Palette settings placeholder.</p>
+                        </div>
+                    </div>
+
+                    <div id="keyboard-modal" class="overlay-modal settings-modal keybinds-modal">
+                        <div class="modal-header">
+                            <h2>Hotkeys</h2>
+                            <button class="close-modal" onclick="closeModal('keyboard-modal')">×</button>
+                        </div>
+                        <div class="modal-content settings-content">
+                            <div class="settings-group">
+                                <div class="settings-group__title">Bindings</div>
+                                <div class="settings-card keybinds-grid" id="keybindsList"></div>
+                            </div>
+                            <div class="settings-group">
+                                <div class="settings-group__title">Tips & resets</div>
+                                <div class="settings-card keybinds-grid">
+                                    <div id="instructionsText" class="keybinds-note"></div>
+                                    <div class="keybinds-actions">
+                                        <span class="keybinds-hint">Click any binding to remap. Mouse buttons work too.</span>
+                                        <button type="button" id="reset-keybinds">Reset to defaults</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="camera-modal" class="overlay-modal">
+                        <div class="modal-header">
+                            <h2>Camera</h2>
+                            <button class="close-modal" onclick="closeModal('camera-modal')">×</button>
+                        </div>
+                        <div class="modal-content">
+                            <p>Camera options placeholder.</p>
+                        </div>
+                    </div>
+
+                    <div id="clipboard-modal" class="overlay-modal">
+                        <div class="modal-header">
+                            <h2>Clipboard</h2>
+                            <button class="close-modal" onclick="closeModal('clipboard-modal')">×</button>
+                        </div>
+                        <div class="modal-content">
+                            <p>Clipboard tools placeholder.</p>
+                        </div>
+                    </div>
+                </div>
+
+                
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    </div>
+
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div id="chatbox-container">
+        <div id="message-list"></div>
+        <div id="chatbox-input">
+            <input type="text" id="chat_textbox" placeholder="Type your message here" maxlength="200" />
+        </div>
+    </div>
+    <div style="font-family:'Ubuntu'">&nbsp;</div>
+
+    <script src="assets/js/bootstrap.min.js"></script>
+<div id="lineLockIndicator">LINESPLITTING</div>`n</body>`n</html>
+
+
+< d i v   i d = \ 
+ 
+ l i n e L o c k I n d i c a t o r \ > L I N E S P L I T T I N G < / d i v > 
+ 
+ 
