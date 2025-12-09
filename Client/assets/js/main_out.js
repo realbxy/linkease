@@ -2791,7 +2791,7 @@
         });
 
         mainCanvas.onmousedown = function(event) {
-            // Mouse hotkeys (LMB=-1, MMB=-2, RMB=-3) via mo_bindings
+            // Mouse hotkeys (LMB=-1, MMB=-2, RMB=-3) via mo_bindingss
             const mcode = mouseButtonToCode(event.button);
             if (isMouseBinding(mcode)) {
                 event.preventDefault();
