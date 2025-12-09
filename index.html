@@ -914,25 +914,10 @@
         function playWithSkin() {
             var nickEl = document.getElementById('nick');
             var skinEl = document.getElementById('skin');
-            var hatEl = document.getElementById('hatUrl');
-            var colorEl = document.getElementById('nameColor');
             var nick = nickEl ? (nickEl.value || '') : '';
             var skin = skinEl ? skinEl.value.trim() : '';
-            var hat = hatEl ? hatEl.value : '';
-            var nameColor = colorEl ? colorEl.value : '';
             var arg = nick;
-            if (typeof formatNickSkinHat === 'function') {
-                arg = formatNickSkinHat(nick, skin, hat, nameColor);
-            } else {
-                if (skin) arg = '{' + skin + '}' + nick;
-                var normColor = (nameColor || '').trim();
-                if (/^[0-9a-f]{3}([0-9a-f]{3})?$/i.test(normColor)) {
-                    if (normColor.length === 3) normColor = normColor.split('').map(function(c) { return c + c; }).join('');
-                    arg += '#c' + normColor.toUpperCase();
-                }
-                var hatRaw = (hat || '').trim();
-                if (hatRaw) arg += '$' + hatRaw;
-            }
+            if (skin) arg = '{' + skin + '}' + nick;
             if (typeof play === 'function') play(arg);
             return false;
         }
@@ -1492,6 +1477,10 @@
             }
             window.addEventListener('beforeunload', saveActiveSkinProfile);
 
+            // Preselect the Cloudflare tunnel as default server
+            const defaultServer = document.querySelector('.server-item[data-address="game.linkease.me:443"]');
+            if (defaultServer) selectServer(defaultServer);
+
             bindSettingsSlider('drawDelay', function(v){ return Math.round(v) + ' ms'; }, function(v){ if (window.setDrawDelay) window.setDrawDelay(v); }, 'drawDelayMs');
             bindSettingsSlider('cameraPanSpeed', function(v){ return Math.round(v) + '%'; }, function(v){ if (window.setCameraPanSpeed) window.setCameraPanSpeed(v); }, 'cameraPanSpeed');
             bindSettingsSlider('cameraZoomSpeed', function(v){ return Math.round(v) + '%'; }, function(v){ if (window.setCameraZoomSpeed) window.setCameraZoomSpeed(v); }, 'cameraZoomSpeed');
@@ -1566,14 +1555,14 @@
                             <div class="server-group">
                                 <div class="server-header" onclick="toggleDropdown(this)">Tournaments</div>
                                 <div class="server-list">
-                                    <div class="server-item" data-address="127.0.0.1:443" onclick="selectServer(this)">
+                                    <div class="server-item" data-address="game.linkease.me:443" onclick="selectServer(this)">
                                         <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-                                        Tournament 1
+                                        Main Tunnel
                                         <span class="player-count">00/25</span>
                                     </div>
-                                    <div class="server-item" data-address="127.0.0.1:444" onclick="selectServer(this)">
+                                    <div class="server-item" data-address="game.linkease.me:443" onclick="selectServer(this)">
                                         <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-                                        Tournament 2
+                                        Main Tunnel (Alt)
                                         <span class="player-count">00/25</span>
                                     </div>
                                 </div>
@@ -1581,14 +1570,14 @@
                             <div class="server-group">
                                 <div class="server-header" onclick="toggleDropdown(this)">Localhost</div>
                                 <div class="server-list">
-                                    <div class="server-item" data-address="127.0.0.1:443" onclick="selectServer(this)">
+                                    <div class="server-item" data-address="game.linkease.me:443" onclick="selectServer(this)">
                                         <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-                                        Port 443
+                                        Tunnel 443
                                         <span class="player-count">00/25</span>
                                     </div>
-                                    <div class="server-item" data-address="216.146.25.15:443" onclick="selectServer(this)">
+                                    <div class="server-item" data-address="game.linkease.me:443" onclick="selectServer(this)">
                                         <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-                                        Test Server
+                                        Tunnel (Backup)
                                         <span class="player-count">00/25</span>
                                     </div>
                                 </div>
@@ -1675,8 +1664,8 @@
                         <!-- hidden select used by main_out.js -->
                         <select id="gamemode" style="display:none;" onchange="setServer($(this).val());">
                             <option selected disabled>Servers:</option>
-                            <option value="127.0.0.1:443">Local 443</option>
-                            <option value="216.146.25.15:443">Test Server</option>
+                            <option value="game.linkease.me:443">Tunnel 443</option>
+                            <option value="game.linkease.me:443">Tunnel (Alt)</option>
                         </select>
                     </div>
 
@@ -1995,8 +1984,3 @@
 <div id="lineLockIndicator">LINESPLITTING</div>`n</body>`n</html>
 
 
-< d i v   i d = \ 
- 
- l i n e L o c k I n d i c a t o r \ > L I N E S P L I T T I N G < / d i v > 
- 
- 
