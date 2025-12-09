@@ -567,9 +567,20 @@
     }
     function resolveWsUrl(rawUrl) {
         if (!rawUrl) return DEFAULT_WSS;
-        if (/^wss?:\/\//i.test(rawUrl)) return rawUrl;
-        const protocol = USE_HTTPS && !rawUrl.includes("game.linkease.me") ? "wss" : "ws";
-        return `${protocol}://${rawUrl}`;
+        const url = (rawUrl || "").trim();
+        // Upgrade explicit ws:// to wss:// when the page is https and host is not loopback.
+        const wsMatch = /^ws:\/\/([^/]+)(\/.*)?$/i.exec(url);
+        if (wsMatch) {
+            const host = wsMatch[1];
+            const path = wsMatch[2] || "";
+            if (USE_HTTPS && !/^127\.0\.0\.1(?::\d+)?$/i.test(host) && !/^localhost(?::\d+)?$/i.test(host)) {
+                return `wss://${host}${path}`;
+            }
+            return url;
+        }
+        if (/^wss?:\/\//i.test(url)) return url;
+        const protocol = USE_HTTPS && !url.includes("127.0.0.1") ? "wss" : "ws";
+        return `${protocol}://${url}`;
     }
     function wsInit(url) {
         if (ws) {
