@@ -568,7 +568,7 @@
     function resolveWsUrl(rawUrl) {
         if (!rawUrl) return DEFAULT_WSS;
         if (/^wss?:\/\//i.test(rawUrl)) return rawUrl;
-        const protocol = USE_HTTPS && !rawUrl.includes("127.0.0.1") ? "wss" : "ws";
+        const protocol = USE_HTTPS && !rawUrl.includes("game.linkease.me") ? "wss" : "ws";
         return `${protocol}://${rawUrl}`;
     }
     function wsInit(url) {
