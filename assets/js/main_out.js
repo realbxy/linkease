@@ -229,6 +229,7 @@
     let log = new Logger(),
         SKIN_URL = "./skins/",
         USE_HTTPS = "https:" == wHandle.location.protocol,
+        DEFAULT_WSS = "wss://game.linkease.me",
         CELL_POINTS_MIN = 5,
         CELL_POINTS_MAX = 120,
         PI_2 = Math.PI * 2,
@@ -309,7 +310,7 @@
         hudFpsSmooth = 0,
         domChatList = null,
         ws = null,
-        WS_URL = null,
+        WS_URL = DEFAULT_WSS,
         isConnected = 0,
         disconnectDelay = 1000,
         syncUpdStamp = Date.now(),
@@ -564,13 +565,20 @@
         ws.close();
         ws = null;
     }
+    function resolveWsUrl(rawUrl) {
+        if (!rawUrl) return DEFAULT_WSS;
+        if (/^wss?:\/\//i.test(rawUrl)) return rawUrl;
+        const protocol = USE_HTTPS && !rawUrl.includes("127.0.0.1") ? "wss" : "ws";
+        return `${protocol}://${rawUrl}`;
+    }
     function wsInit(url) {
         if (ws) {
             log.debug("websocket init on existing connection!");
             wsCleanup();
         }
         wjQuery("#connecting").show();
-        ws = new WebSocket(`ws${USE_HTTPS && !url.includes("127.0.0.1") ? "s" : ""}://${WS_URL = url}`);
+        WS_URL = resolveWsUrl(url);
+        ws = new WebSocket(WS_URL);
         ws.binaryType = "arraybuffer";
         ws.onopen = wsOpen;
         ws.onmessage = wsMessage;
@@ -2874,10 +2882,12 @@
         log.info(`Init completed in ${Date.now() - DATE}ms`);
         gameReset();
         showOverlay();
+        let wsTarget = DEFAULT_WSS;
         if (settings.allowGETipSet && wHandle.location.search) {
             let div = /ip=([\w\W]+):([0-9]+)/.exec(wHandle.location.search.slice(1));
-            if (div) wsInit(`${div[1]}:${div[2]}`);
+            if (div) wsTarget = `${div[1]}:${div[2]}`;
         }
+        wsInit(wsTarget);
         window.requestAnimationFrame(drawGame);
     }
     wHandle.setServer = function(arg) {
