@@ -265,11 +265,11 @@
             45: new Uint8Array([45]),
             254: new Uint8Array([254])
         },
-        cells = Object.create({
+        cells = {
             mine: [],
-            byId: {},
+            byId: new Map(),
             list: [],
-        }),
+        },
         border = Object.create({
             left: -2000,
             right: 2000,
