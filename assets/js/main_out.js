@@ -604,6 +604,11 @@
         wsSend(UINT8_255);
         log.debug(`WS connected, using https: ${USE_HTTPS}`);
         log.info("Socket open.");
+        try {
+            sendSetNickSkin(buildNamePayload());
+        } catch (e) {
+            console.error && console.error("Failed to sync name/skin on connect:", e);
+        }
     }
     function wsError(error) {
         log.error(error);
@@ -864,9 +869,11 @@
         wsSend(writer);
     }
     function sendPlay(name) {
+        const builtName = (typeof wHandle.buildNamePayload === "function") ? wHandle.buildNamePayload() : "";
+        const payload = builtName || name || "";
         let writer = new Writer(1);
         writer.setUint8(0x00);
-        writer.setStringUTF8(name);
+        writer.setStringUTF8(payload);
         wsSend(writer);
     }
     function sendChat(text) {
@@ -2032,6 +2039,7 @@
             const colorVal = (nameColorInput && nameColorInput.value) ? nameColorInput.value.trim() : "";
             return formatNickSkinHat(nickVal, skinVal, hatVal, colorVal);
         }
+        wHandle.buildNamePayload = buildNamePayload;
         function prefetchHatFromInput() {
             if (!hatInput) return;
             const hatCode = buildHatCode(hatInput.value);
