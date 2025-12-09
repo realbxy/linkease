@@ -60,15 +60,14 @@
         const sender = document.createElement("span");
         sender.className = "sender";
         sender.textContent = (entry.name || "").trim() + (entry.name ? ":" : "");
-        // Choose sender color: system tint, else self uses nameColor, else fallback to entry.color/white.
+        // Choose sender color: system tint, else explicit self flag uses own picker, else entry-provided/white.
         let chosenColor = "#ffffff";
         if (entry.system) {
             chosenColor = "#9aa0b5";
         } else {
             let selfColor = "#ffffff";
             try { selfColor = resolveNameColor(); } catch (e) {}
-            const currentName = (document.getElementById('nick') || {}).value;
-            const isSelf = !!entry.isSelf || !!entry.self || (!!currentName && entry.name && currentName.trim() === entry.name.trim());
+            const isSelf = !!entry.isSelf || !!entry.self;
             if (isSelf) chosenColor = selfColor;
             else if (entry.color) chosenColor = entry.color;
         }
@@ -472,6 +471,14 @@
         kk2: "https://i.imgur.com/miRxB9s.png"
     };
     const hatImages = {};
+    function normalizeNameColor(raw) {
+        let hex = (raw || "").trim();
+        if (!hex) return "";
+        if (hex[0] === "#") hex = hex.slice(1);
+        if (!/^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(hex)) return "";
+        if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
+        return hex.toUpperCase();
+    }
     function buildHatCode(rawHat) {
         const hat = (rawHat || "").trim();
         if (!hat) return "";
@@ -523,20 +530,28 @@
     function extractHatFromName(value) {
         let nameStr = value || "";
         let hatCode = null;
+        let nameColor = null;
         const match = /\$(u:[^$]+|[a-zA-Z0-9_-]+)$/.exec(nameStr);
         if (match) {
             hatCode = match[1];
             nameStr = nameStr.slice(0, match.index);
         }
-        return {name: nameStr.trim(), hatCode: hatCode};
+        const colorMatch = /#c([0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?)$/i.exec(nameStr.trim());
+        if (colorMatch) {
+            nameColor = normalizeNameColor(colorMatch[1]);
+            nameStr = nameStr.slice(0, colorMatch.index);
+        }
+        return {name: nameStr.trim(), hatCode: hatCode, nameColor: nameColor};
     }
-    function formatNickSkinHat(nick, skin, hatRaw) {
+    function formatNickSkinHat(nick, skin, hatRaw, nameColorRaw) {
         const name = (nick || "").trim();
         const skinVal = (skin || "").trim();
         const hatCode = buildHatCode(hatRaw);
+        const nameColor = normalizeNameColor(nameColorRaw);
         let payload = name;
-        if (skinVal) payload = `{${skinVal}}${payload}`;
+        if (nameColor) payload = `${payload}#c${nameColor}`;
         if (hatCode) payload = `${payload}$${hatCode}`;
+        if (skinVal) payload = `{${skinVal}}${payload}`;
         return payload;
     }
     function wsCleanup() {
@@ -705,10 +720,12 @@
                 for (let i = 0; i < count; ++i) {
                     const isMe = !!reader.getUint32();
                     const rawName = reader.getStringUTF8() || "An unnamed cell";
-                    const cleaned = extractHatFromName(rawName).name;
+                    const parsedLb = extractHatFromName(rawName);
+                    const cleaned = parsedLb.name || "An unnamed cell";
                     leaderboard.items.push({
                         me: isMe,
-                        name: cleaned
+                        name: cleaned,
+                        color: parsedLb.nameColor ? ("#" + parsedLb.nameColor) : null
                     });
                 }
                 drawLeaderboard();
@@ -749,7 +766,8 @@
                 name = reader.getStringUTF8().trim();
                 let reg = /\{([\w]+)\}/.exec(name);
                 if (reg) name = name.replace(reg[0], "").trim();
-                name = extractHatFromName(name).name;
+                const parsedChatName = extractHatFromName(name);
+                name = parsedChatName.name;
                 let message = reader.getStringUTF8(),
                     server = !!(flags & 0x80),
                     admin = !!(flags & 0x40),
@@ -759,17 +777,18 @@
                 if (mod) name = "[MOD] " + name;
                 let wait = Math.max(3000, 1000 + message.length * 150);
                 chat.waitUntil = syncUpdStamp - chat.waitUntil > 1000 ? syncUpdStamp + wait : chat.waitUntil + wait;
+                const entryColor = parsedChatName.nameColor ? ("#" + parsedChatName.nameColor) : "#FFF";
                 const entry = {
                     server: server,
                     admin: admin,
                     mod: mod,
-                    color: "#FFF",
+                    color: entryColor,
                     name: name,
                     message: message,
                     time: syncUpdStamp
                 };
                 chat.messages.push(entry);
-                appendDomChatMessage({name: name, message: message, color: "#FFF", system: server});
+                appendDomChatMessage({name: name, message: message, color: entryColor, system: server});
                 // best-effort OP-mode detection from server announcements
                 try {
                     if (server && /op mode/i.test(message)) {
@@ -794,8 +813,10 @@
                         let x = reader.getFloat32();
                         let y = reader.getFloat32();
                         let isSelf = !!reader.getUint8();
+                        let r = reader.getUint8(), g = reader.getUint8(), b = reader.getUint8();
                         let name = reader.getStringUTF8();
-                        window.__minimapPlayers.push({id: id, x: x, y: y, name: name, isSelf: isSelf});
+                        let colorHex = bytesToColor(r, g, b);
+                        window.__minimapPlayers.push({id: id, x: x, y: y, name: name, isSelf: isSelf, color: colorHex});
                         if (isSelf) window.__myPlayerId = id;
                         seen.add(id);
                         if (!minimapSmooth.has(id)) {
@@ -1167,8 +1188,10 @@
                 }
                 let reg = /\{([\w]+)\}/.exec(text);
                 if (reg) text = text.replace(reg[0], "").trim();
-                const nameHex = typeof resolveNameColor === "function" ? resolveNameColor() : ("#" + (String($("#nameColor").val() || "FFF")));
-                ctx.fillStyle = isMe ? nameHex : "#e0e0e0";
+                const parsedColor = leaderboard.items[i] && leaderboard.items[i].color ? leaderboard.items[i].color : null;
+                const selfHex = typeof resolveNameColor === "function" ? resolveNameColor() : ("#" + (String($("#nameColor").val() || "FFF")));
+                const nameHex = parsedColor || (isMe ? selfHex : "#e0e0e0");
+                ctx.fillStyle = nameHex;
                 if (leaderboard.type === "ffa") text = (i + 1) + ". " + (text || "An unnamed cell");
                 ctx.textAlign = "left";
                 ctx.fillText(text, 14, 62 + 26 * i);
@@ -1294,17 +1317,21 @@
             const latestRaw = window.__minimapPlayers || [];
             minimapList = Array.from(minimapSmooth, ([id, v]) => {
                 const raw = latestRaw.find(p => p.id === id) || {};
-                const cleanName = raw.name ? raw.name.replace(/\$(u:[^$]+|[A-Za-z0-9_-]+)$/, "").trim() : raw.name;
-                return {id: id, x: v.x, y: v.y, name: cleanName, isSelf: raw.isSelf};
+                const parsed = extractHatFromName(raw.name || "");
+                const cleanName = parsed.name;
+                const colorHex = parsed.nameColor ? ("#" + parsed.nameColor) : raw.color;
+                return {id: id, x: v.x, y: v.y, name: cleanName, isSelf: raw.isSelf, color: colorHex};
             });
         } else if (window.__minimapPlayers && window.__minimapPlayers.length) {
             minimapList = window.__minimapPlayers.map(p => {
+                const parsed = extractHatFromName(p.name || "");
                 return {
                     id: p.id,
                     x: p.x,
                     y: p.y,
-                    name: p.name ? p.name.replace(/\$(u:[^$]+|[A-Za-z0-9_-]+)$/, "").trim() : p.name,
-                    isSelf: p.isSelf
+                    name: parsed.name,
+                    isSelf: p.isSelf,
+                    color: parsed.nameColor ? ("#" + parsed.nameColor) : p.color
                 };
             });
         }
@@ -1319,7 +1346,7 @@
                 let mx = beginX + (p.x - border.left) * scaleX;
                 let my = beginY + (p.y - border.top) * scaleY;
                 if (mx < beginX - 2 || mx > beginX + width + 2 || my < beginY - 2 || my > beginY + height + 2) continue;
-                const fill = p.isSelf ? selfColor : "#FFF";
+                const fill = p.isSelf ? selfColor : (p.color || "#FFF");
                 // draw indicator
                 mainCtx.beginPath();
                 mainCtx.fillStyle = fill;
@@ -1530,6 +1557,7 @@
             this.rs = s;
             this.lastFrame = Date.now();
             this.hatCode = null;
+            this.nameColor = null;
             this.setColor(color);
             this.setName(name);
             this.setSkin(skin);
@@ -1660,6 +1688,7 @@
                 this.name = parsed.name.replace(nameSkin[0], "").trim();
                 this.setSkin(nameSkin[1]);
             } else this.name = parsed.name;
+            this.nameColor = parsed.nameColor ? ("#" + parsed.nameColor) : null;
             this.hatCode = parsed.hatCode;
         }
         setSkin(value) {
@@ -1804,14 +1833,14 @@
                 const isLargestOther = this.s >= maxOtherSize * 0.98;
                 if (!isLargestOther && this.s < otherThreshold) return;
             }
-        if (settings.showMass && (isMine || !cells.mine.length) && !this.food/* && !this.ejected*/) {
+            if (settings.showMass && (isMine || !cells.mine.length) && !this.food/* && !this.ejected*/) {
                 let mass = (~~(this.s * this.s / 100)).toString();
                 if (this.name && settings.showNames) {
-                    drawText(ctx, 0, this.x, this.y, this.nameSize, this.drawNameSize, this.name, isMine);
+                    drawText(ctx, 0, this.x, this.y, this.nameSize, this.drawNameSize, this.name, isMine, this.nameColor);
                     let y = this.y + Math.max(this.s / 4.5, this.nameSize / 1.5);
-                    drawText(ctx, 1, this.x, y, this.nameSize / 2, this.drawNameSize / 2, mass, isMine);
-                } else drawText(ctx, 1, this.x, this.y, this.nameSize / 2, this.drawNameSize / 2, mass, isMine);
-            } else if (this.name && settings.showNames) drawText(ctx, 0, this.x, this.y, this.nameSize, this.drawNameSize, this.name, isMine);
+                    drawText(ctx, 1, this.x, y, this.nameSize / 2, this.drawNameSize / 2, mass, isMine, null);
+                } else drawText(ctx, 1, this.x, this.y, this.nameSize / 2, this.drawNameSize / 2, mass, isMine, null);
+            } else if (this.name && settings.showNames) drawText(ctx, 0, this.x, this.y, this.nameSize, this.drawNameSize, this.name, isMine, this.nameColor);
         }
     }
     // 2-var draw-stay cache
@@ -1919,12 +1948,12 @@
             return "#FFF";
         }
     }
-    function drawText(ctx, isMass, x, y, size, drawSize, value, isMine) {
+    function drawText(ctx, isMass, x, y, size, drawSize, value, isMine, nameColor) {
         ctx.save();
         if (!value) { ctx.restore(); return; }
         if (size > 500) {
             const outlineOn = settings.showTextOutline !== false;
-            const colorValue = isMass ? "#FFF" : (isMine ? resolveNameColor() : "#FFF");
+            const colorValue = isMass ? "#FFF" : (nameColor || (isMine ? resolveNameColor() : "#FFF"));
             return drawRaw(ctx, x, y, value, drawSize, colorValue, outlineOn);
         }
         ctx.imageSmoothingQuality = "high";
@@ -1947,7 +1976,7 @@
             }
         } else {
             const outlineOn = settings.showTextOutline !== false;
-            const colorValue = isMine ? resolveNameColor() : "#FFF";
+            const colorValue = nameColor || (isMine ? resolveNameColor() : "#FFF");
             const cacheKey = `${colorValue}|${outlineOn ? 1 : 0}`;
             let cache = getNameCache(value, size, cacheKey, colorValue, outlineOn);
             cache.accessTime = syncAppStamp;
@@ -1974,13 +2003,15 @@
         let nickInput = document.getElementById('nick');
         let skinInput = document.getElementById('skin');
         let hatInput = document.getElementById('hatUrl');
+        let nameColorInput = document.getElementById('nameColor');
         let skinPreview = document.getElementById('skinPreview');
 
         function buildNamePayload() {
             const nickVal = (nickInput && nickInput.value) ? nickInput.value.trim() : "";
             const skinVal = (skinInput && skinInput.value) ? skinInput.value.trim() : "";
-            // Do not append hat to the name; hats are applied locally from the Hat URL field.
-            return skinVal ? `{${skinVal}}${nickVal}` : nickVal;
+            const hatVal = (hatInput && hatInput.value) ? hatInput.value.trim() : "";
+            const colorVal = (nameColorInput && nameColorInput.value) ? nameColorInput.value.trim() : "";
+            return formatNickSkinHat(nickVal, skinVal, hatVal, colorVal);
         }
         function prefetchHatFromInput() {
             if (!hatInput) return;
@@ -2040,6 +2071,16 @@
                     try { localStorage.setItem('mo_hat', hatVal); } catch (e) {}
                     const hatCode = buildHatCode(hatVal);
                     if (hatCode) getHatImageFromCode(hatCode);
+                    sendSetNickSkin(buildNamePayload());
+                } catch (e) {}
+            });
+        }
+        if (nameColorInput) {
+            try { nameColorInput.value = localStorage.getItem('mo_nameColor') || ""; } catch (e) {}
+            nameColorInput.addEventListener('blur', function() {
+                try {
+                    const val = (nameColorInput.value || "").trim();
+                    try { localStorage.setItem('mo_nameColor', val); } catch (e) {}
                     sendSetNickSkin(buildNamePayload());
                 } catch (e) {}
             });
