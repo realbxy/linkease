@@ -305,6 +305,12 @@
             maxScore: 0
         }),
         minimapSmooth = new Map(),
+        minimapLastFrame = performance.now(),
+        MINIMAP_FPS = 30,
+        MINIMAP_SMOOTHING = 0.08,
+        MINIMAP_INDICATOR_RADIUS = 5,
+        MINIMAP_LABEL_FONT = "12px Nunito, Arial, sans-serif",
+        MINIMAP_LABEL_OUTLINE = 4,
         ghostCells = new Map(),
         lastSeenCells = new Map(),
         hudFpsSmooth = 0,
@@ -1131,44 +1137,28 @@
         const scoreVal = isNaN(stats.score) ? 0 : Math.round(stats.score);
         const massVal = scoreVal;
         const cellsCount = Array.isArray(cells.mine) ? cells.mine.length : 0;
-        const lines = [
-            `FPS: ${smoothFps}`,
-            `Ping: ${ping}`,
-            `Mass: ${prettyPrintNumber(massVal)}`,
-            `Score: ${prettyPrintNumber(scoreVal)}`,
-            `Cells: ${cellsCount}`
-        ];
-        // Adjust padding/spacing to avoid touching borders and reduce bottom gap
-        const bodyFont = "15px Arial";
-        const padX = 16;
-        const padTop = 14;
-        const padBottom = 0;
-        const lineHeight = 15;
-        let width = 0;
+        // Rise-like stats overlay: simple stacked text, no card box
+        const lines = [];
+        lines.push(`FPS: ${smoothFps}`);
+        lines.push(`Ping: ${ping}`);
+        if (massVal > 0) lines.push(`Mass: ${prettyPrintNumber(massVal)}`);
+        if (scoreVal > 0) lines.push(`Score: ${prettyPrintNumber(scoreVal)}`);
+        if (cellsCount > 0) lines.push(`Cells: ${cellsCount}`);
+        const font = "14px Nunito, Arial, sans-serif";
+        const lineHeight = 18;
+        const x = 12, y = 12;
         mainCtx.save();
-        mainCtx.font = bodyFont;
+        mainCtx.font = font;
+        mainCtx.textAlign = "left";
+        mainCtx.textBaseline = "top";
+        // subtle shadow to stand off the background like Rise UI
+        mainCtx.shadowColor = "rgba(0,0,0,0.65)";
+        mainCtx.shadowBlur = 2;
+        mainCtx.shadowOffsetX = 1;
+        mainCtx.shadowOffsetY = 1;
         for (let i = 0; i < lines.length; i++) {
-            width = Math.max(width, mainCtx.measureText(lines[i]).width);
-        }
-        const cardWidth = Math.max(190, padX * 2 + width);
-        const cardHeight = padTop + padBottom + lines.length * lineHeight;
-        const x = 10, y = 14;
-        // background
-        mainCtx.fillStyle = "rgba(10,10,12,0.82)";
-        mainCtx.fillRect(x, y, cardWidth, cardHeight);
-        // inner highlight
-        mainCtx.strokeStyle = "rgba(255,255,255,0.05)";
-        mainCtx.lineWidth = 1;
-        mainCtx.strokeRect(x + 1.5, y + 1.5, cardWidth - 3, cardHeight - 3);
-        mainCtx.strokeStyle = "rgba(255,255,255,0.12)";
-        mainCtx.strokeRect(x + 0.5, y + 0.5, cardWidth - 1, cardHeight - 1);
-        // body
-        mainCtx.font = bodyFont;
-        for (let i = 0; i < lines.length; i++) {
-            mainCtx.fillStyle = "#e0e0e0";
-            // highlight ping in green if known
-            if (lines[i].startsWith("Ping") && !isNaN(stats.latency)) mainCtx.fillStyle = "#5ce35c";
-            mainCtx.fillText(lines[i], x + padX, y + padTop + i * lineHeight);
+            mainCtx.fillStyle = "#ffffff";
+            mainCtx.fillText(lines[i], x, y + i * lineHeight);
         }
         mainCtx.restore();
     }
@@ -1333,11 +1323,20 @@
         for (let i = 0; i < cells.mine.length; i++) if (cells.byId.has(cells.mine[i])) myCells.push(cells.byId.get(cells.mine[i]));
 
         // Use server-provided minimap players if available (shows all players regardless of view).
-        // Smooth positions
+        // Smooth positions using a Rise-like cadence (fixed fps + gentle lerp)
+        const now = performance.now();
+        const frameMs = 1000 / MINIMAP_FPS;
+        const smoothingScale = Math.min(1, MINIMAP_SMOOTHING * (frameMs > 0 ? (now - minimapLastFrame) / frameMs : 1));
         minimapSmooth.forEach((val) => {
-            val.x += (val.tx - val.x) * 0.22;
-            val.y += (val.ty - val.y) * 0.22;
+            // initialize missing coords to avoid NaN jitter
+            if (!isFinite(val.x) || !isFinite(val.y)) {
+                val.x = isFinite(val.tx) ? val.tx : 0;
+                val.y = isFinite(val.ty) ? val.ty : 0;
+            }
+            val.x += (val.tx - val.x) * smoothingScale;
+            val.y += (val.ty - val.y) * smoothingScale;
         });
+        minimapLastFrame = now;
         let minimapList = null;
         if (minimapSmooth.size) {
             const latestRaw = window.__minimapPlayers || [];
@@ -1362,7 +1361,7 @@
             });
         }
         mainCtx.save();
-        const INDICATOR = Math.max(2, Math.round(3 * camera.viewMult));
+        const INDICATOR = MINIMAP_INDICATOR_RADIUS;
         if (minimapList) {
             // resolve self color once per frame; guard DOM access
             let selfColor = "#FFF";
@@ -1373,7 +1372,7 @@
                 let my = beginY + (p.y - border.top) * scaleY;
                 if (mx < beginX - 2 || mx > beginX + width + 2 || my < beginY - 2 || my > beginY + height + 2) continue;
                 const fill = p.isSelf ? selfColor : (p.color || "#FFF");
-                // draw indicator
+                // draw indicator (Rise-like: crisp circle, fixed size)
                 mainCtx.beginPath();
                 mainCtx.fillStyle = fill;
                 mainCtx.arc(mx, my, INDICATOR, 0, PI_2);
@@ -1381,10 +1380,14 @@
                 // draw name label above indicator
                 if (p.name) {
                     const safeName = String(p.name || "").slice(0, 32);
-                    mainCtx.fillStyle = fill;
-                    mainCtx.font = "11px Arial";
+                    mainCtx.font = MINIMAP_LABEL_FONT;
                     mainCtx.textAlign = "center";
                     mainCtx.textBaseline = "bottom";
+                    mainCtx.lineJoin = "round";
+                    mainCtx.lineWidth = MINIMAP_LABEL_OUTLINE;
+                    mainCtx.strokeStyle = "#000";
+                    mainCtx.strokeText(safeName, mx, my - INDICATOR - 2);
+                    mainCtx.fillStyle = fill;
                     mainCtx.fillText(safeName, mx, my - INDICATOR - 2);
                 }
             }
@@ -1422,9 +1425,13 @@
                 mainCtx.fill();
                 if (p.name) {
                     const safeName = String(p.name || "").slice(0, 32);
-                    mainCtx.font = "11px Arial";
+                    mainCtx.font = MINIMAP_LABEL_FONT;
                     mainCtx.textAlign = "center";
                     mainCtx.textBaseline = "bottom";
+                    mainCtx.lineJoin = "round";
+                    mainCtx.lineWidth = MINIMAP_LABEL_OUTLINE;
+                    mainCtx.strokeStyle = "#000";
+                    mainCtx.strokeText(safeName, mx, my - INDICATOR - 2);
                     mainCtx.fillStyle = fill;
                     mainCtx.fillText(safeName, mx, my - INDICATOR - 2);
                 }
