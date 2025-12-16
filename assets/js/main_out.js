@@ -1,5 +1,48 @@
 (function(wHandle, wjQuery) {
     "use strict";
+
+    (function injectLeaderboardStyle() {
+        const lbStyleId = "client-leaderboard-style";
+        if (document.getElementById(lbStyleId)) return;
+        const style = document.createElement("style");
+        style.id = lbStyleId;
+        style.textContent = `#leaderboard[data-v-8a0c31c6] {
+            position: fixed;
+            right: 0;
+            top: 0;
+            min-width: 220px;
+            height: 272px;
+            padding: 13px;
+            background: rgba(10, 10, 12, 0.7);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            pointer-events: none;
+        }
+
+        .leaderboard-title[data-v-8a0c31c6] {
+            font-size: 24px;
+            margin-bottom: 6px;
+            color: #fff;
+        }
+
+        .leaderboard-label[data-v-8a0c31c6] {
+            font-size: 18px;
+            line-height: 24px;
+            white-space: nowrap;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .leaderboard-label[data-v-8a0c31c6] > :last-child {
+            display: block;
+            width: 100%;
+            margin-left: 4px;
+        }
+        `;
+        document.head.appendChild(style);
+    })();
+
     if (!Date.now) Date.now = function() {
         return (+new Date()).getTime();
     }
@@ -265,96 +308,13 @@
             45: new Uint8Array([45]),
             254: new Uint8Array([254])
         },
-        cells = {
-            mine: [],
-            byId: new Map(),
-            list: [],
-        },
-        border = Object.create({
-            left: -2000,
-            right: 2000,
-            top: -2000,
-            bottom: 2000,
-            width: 4000,
-            height: 4000,
-            centerX: -1,
-            centerY: -1
-        }),
-        leaderboard = Object.create({
-            type: NaN,
-            items: null,
-            canvas: document.createElement("canvas"),
-            teams: ["#F33", "#3F3", "#33F"]
-        }),
-        chat = Object.create({
-            messages: [],
-            waitUntil: 0,
-            canvas: document.createElement("canvas"),
-            visible: 0,
-        }),
-        stats = Object.create({
-            framesPerSecond: 0,
-            latency: NaN,
-            supports: null,
-            info: null,
-            pingLoopId: NaN,
-            pingLoopStamp: null,
-            canvas: document.createElement("canvas"),
-            visible: 0,
-            score: NaN,
-            maxScore: 0
-        }),
-        minimapSmooth = new Map(),
-        minimapLastFrame = performance.now(),
-        MINIMAP_FPS = 30,
+        MINIMAP_FPS = 240,
         MINIMAP_SMOOTHING = 0.08,
         MINIMAP_INDICATOR_RADIUS = 5,
         MINIMAP_LABEL_FONT = "12px Nunito, Arial, sans-serif",
         MINIMAP_LABEL_OUTLINE = 4,
-        ghostCells = new Map(),
-        lastSeenCells = new Map(),
-        hudFpsSmooth = 0,
-        domChatList = null,
-        ws = null,
-        WS_URL = DEFAULT_WSS,
-        isConnected = 0,
-        disconnectDelay = 1000,
-        syncUpdStamp = Date.now(),
-        syncAppStamp = Date.now(),
-        mainCanvas = null,
-        mainCtx = null,
-        soundsVolume,
-        loadedSkins = {},
-        overlayShown = 0,
-        isTyping = 0,
-        chatBox = null,
-        opModeDetected = false,
-        idLookupSelecting = false,
-        mapCenterSet = 0,
-        camera = {
-            x: 0,
-            y: 0,
-            z: 1,
-            zScale: 1,
-            viewMult: 1
-        },
-        target = {
-            x: 0,
-            y: 0,
-            z: 1
-        },
-        cameraTargetBuffer = [{t: Date.now(), x: 0, y: 0, z: 1}],
-        lastCameraFrame = Date.now(),
-        autoRespawnArmed = false,
-        autoRespawnTimeout = null,
-        hasSpawnedOnce = false,
-        mouse = {
-            x: NaN,
-            y: NaN,
-            z: 1
-        },
-        frozenMousePos = null,
-        frozenMouseUntil = 0,
+        DUAL_MSG_CHANNEL = "dual-multibox",
+        isDualChild = new URLSearchParams(wHandle.location.search).has("dualChild"),
         settings = {
             mobile: "createTouch" in document,
             showSkins: true,
@@ -384,6 +344,83 @@
             cameraZoomSpeed: 14,
             scrollZoomRate: 100,
             allowGETipSet: false
+        },
+        // per-instance bindings (will be assigned via setActiveState)
+        cells,
+        border,
+        leaderboard,
+        chat,
+        stats,
+        minimapSmooth,
+        minimapLastFrame,
+        ghostCells,
+        lastSeenCells,
+        hudFpsSmooth,
+        domChatList,
+        ws,
+        WS_URL,
+        isConnected,
+        disconnectDelay,
+        syncUpdStamp,
+        syncAppStamp,
+        mainCanvas,
+        mainCtx,
+        soundsVolume,
+        loadedSkins,
+        overlayShown,
+        isTyping,
+        chatBox,
+        opModeDetected,
+        idLookupSelecting,
+        mapCenterSet,
+        camera,
+        target,
+        cameraTargetBuffer,
+        lastCameraFrame,
+        autoRespawnArmed,
+        autoRespawnTimeout,
+        hasSpawnedOnce,
+        mouse,
+        frozenMousePos,
+        frozenMouseUntil,
+        activeInstance,
+        primaryInstance,
+        secondaryInstance,
+        CELL_OWNERS = {
+            primary: new Set(),
+            secondary: new Set()
+        },
+        MY_CELL_IDS = new Set(),
+        playerIdsByInstance = {
+            primary: null,
+            secondary: null
+        },
+        markCellOwner = function(id, label) {
+            if (!id) return;
+            const other = label === "primary" ? "secondary" : "primary";
+            CELL_OWNERS[label].add(id);
+            CELL_OWNERS[other].delete(id);
+            MY_CELL_IDS.add(id);
+        },
+        unmarkCellOwner = function(id) {
+            if (!id) return;
+            CELL_OWNERS.primary.delete(id);
+            CELL_OWNERS.secondary.delete(id);
+            MY_CELL_IDS.delete(id);
+        },
+        clearCellOwners = function(label) {
+            if (!label) {
+                CELL_OWNERS.primary.clear();
+                CELL_OWNERS.secondary.clear();
+                MY_CELL_IDS.clear();
+                return;
+            }
+            CELL_OWNERS[label].clear();
+        },
+        getCellOwner = function(id) {
+            if (CELL_OWNERS.primary.has(id)) return "primary";
+            if (CELL_OWNERS.secondary.has(id)) return "secondary";
+            return null;
         },
         // expose settings for UI syncing outside this closure
         __exposeSettings = (function () { try { wHandle.__clientSettings = settings; } catch (e) {} })(),
@@ -432,36 +469,330 @@
                 const scrollRate = wHandle.localStorage.getItem("mo_scrollZoomRate");
                 if (scrollRate !== null && !isNaN(parseFloat(scrollRate))) settings.scrollZoomRate = Math.max(10, Math.min(400, parseFloat(scrollRate)));
             } catch (e) {}
-        })(),
-        pressed = {
-            space: 0,
-            w: 0,
-            e: 0,
-            r: 0,
-            t: 0,
-            p: 0,
-            q: 0,
-            o: 0,
-            m: 0,
-            i: 0,
-            y: 0,
-            u: 0,
-            k: 0,
-            l: 0,
-            h: 0,
-            z: 0,
-            x: 0,
-            s: 0,
-            c: 0,
-            g: 0,
-            j: 0,
-            b: 0,
-            v: 0,
-            n: 0,
-            esc: 0
-        },
+        })();
+
+    function createClientInstanceState() {
+        return {
+            cells: {
+                mine: [],
+                byId: new Map(),
+                list: []
+            },
+            border: Object.create({
+                left: -2000,
+                right: 2000,
+                top: -2000,
+                bottom: 2000,
+                width: 4000,
+                height: 4000,
+                centerX: -1,
+                centerY: -1
+            }),
+            leaderboard: Object.create({
+                type: NaN,
+                items: null,
+                canvas: document.createElement("canvas"),
+                teams: ["#F33", "#3F3", "#33F"]
+            }),
+            chat: Object.create({
+                messages: [],
+                waitUntil: 0,
+                canvas: document.createElement("canvas"),
+                visible: 0,
+            }),
+            stats: Object.create({
+                framesPerSecond: 0,
+                latency: NaN,
+                supports: null,
+                info: null,
+                pingLoopId: NaN,
+                pingLoopStamp: null,
+                canvas: document.createElement("canvas"),
+                visible: 0,
+                score: NaN,
+                maxScore: 0
+            }),
+            minimapSmooth: new Map(),
+            minimapLastFrame: performance.now(),
+            ghostCells: new Map(),
+            lastSeenCells: new Map(),
+            hudFpsSmooth: 0,
+            domChatList: null,
+            ws: null,
+            WS_URL: DEFAULT_WSS,
+            isConnected: 0,
+            disconnectDelay: 1000,
+            syncUpdStamp: Date.now(),
+            syncAppStamp: Date.now(),
+            mainCanvas: null,
+            mainCtx: null,
+            soundsVolume: null,
+            loadedSkins: {},
+            overlayShown: 0,
+            isTyping: 0,
+            chatBox: null,
+            opModeDetected: false,
+            idLookupSelecting: false,
+            mapCenterSet: 0,
+            camera: {
+                x: 0,
+                y: 0,
+                z: 1,
+                zScale: 1,
+                viewMult: 1
+            },
+            target: {
+                x: 0,
+                y: 0,
+                z: 1
+            },
+            cameraTargetBuffer: [{t: Date.now(), x: 0, y: 0, z: 1}],
+            lastCameraFrame: Date.now(),
+            autoRespawnArmed: false,
+            autoRespawnTimeout: null,
+            hasSpawnedOnce: false,
+            mouse: {
+                x: NaN,
+                y: NaN,
+                z: 1
+            },
+            zoomTarget: 1,
+            frozenMousePos: null,
+            frozenMouseUntil: 0
+        };
+    }
+    // Mirror a zoom value into a given client state (mouse + camera)
+    function applyZoomToState(state, zVal) {
+        if (!state) return;
+        state.zoomTarget = zVal;
+        if (state.mouse) state.mouse.z = zVal;
+        if (state.camera) {
+            state.camera.z = zVal;
+            state.camera.zScale = 1 / zVal;
+        }
+        if (state.target) state.target.z = zVal;
+    }
+    function applyViewMultToState(state, viewMultVal) {
+        if (!state || !state.camera) return;
+        state.camera.viewMult = viewMultVal;
+    }
+    function persistActiveClientState() {
+        if (!activeInstance) return;
+        activeInstance.cells = cells;
+        activeInstance.border = border;
+        activeInstance.leaderboard = leaderboard;
+        activeInstance.chat = chat;
+        activeInstance.stats = stats;
+        activeInstance.minimapSmooth = minimapSmooth;
+        activeInstance.minimapLastFrame = minimapLastFrame;
+        activeInstance.ghostCells = ghostCells;
+        activeInstance.lastSeenCells = lastSeenCells;
+        activeInstance.hudFpsSmooth = hudFpsSmooth;
+        activeInstance.domChatList = domChatList;
+        activeInstance.ws = ws;
+        activeInstance.WS_URL = WS_URL;
+        activeInstance.isConnected = isConnected;
+        activeInstance.disconnectDelay = disconnectDelay;
+        activeInstance.syncUpdStamp = syncUpdStamp;
+        activeInstance.syncAppStamp = syncAppStamp;
+        activeInstance.mainCanvas = mainCanvas;
+        activeInstance.mainCtx = mainCtx;
+        activeInstance.soundsVolume = soundsVolume;
+        activeInstance.loadedSkins = loadedSkins;
+        activeInstance.overlayShown = overlayShown;
+        activeInstance.isTyping = isTyping;
+        activeInstance.chatBox = chatBox;
+        activeInstance.opModeDetected = opModeDetected;
+        activeInstance.idLookupSelecting = idLookupSelecting;
+        activeInstance.mapCenterSet = mapCenterSet;
+        activeInstance.camera = camera;
+        activeInstance.target = target;
+        activeInstance.cameraTargetBuffer = cameraTargetBuffer;
+        activeInstance.lastCameraFrame = lastCameraFrame;
+        activeInstance.autoRespawnArmed = autoRespawnArmed;
+        activeInstance.autoRespawnTimeout = autoRespawnTimeout;
+        activeInstance.hasSpawnedOnce = hasSpawnedOnce;
+        activeInstance.mouse = mouse;
+        activeInstance.zoomTarget = zoomTarget;
+        activeInstance.frozenMousePos = frozenMousePos;
+        activeInstance.frozenMouseUntil = frozenMouseUntil;
+    }
+    function setActiveClientState(state) {
+        persistActiveClientState();
+        activeInstance = state;
+        cells = state.cells;
+        border = state.border;
+        leaderboard = state.leaderboard;
+        chat = state.chat;
+        stats = state.stats;
+        minimapSmooth = state.minimapSmooth;
+        minimapLastFrame = state.minimapLastFrame;
+        ghostCells = state.ghostCells;
+        lastSeenCells = state.lastSeenCells;
+        hudFpsSmooth = state.hudFpsSmooth;
+        domChatList = state.domChatList;
+        ws = state.ws;
+        WS_URL = state.WS_URL;
+        isConnected = state.isConnected;
+        disconnectDelay = state.disconnectDelay;
+        syncUpdStamp = state.syncUpdStamp;
+        syncAppStamp = state.syncAppStamp;
+        mainCanvas = state.mainCanvas;
+        mainCtx = state.mainCtx;
+        soundsVolume = state.soundsVolume;
+        loadedSkins = state.loadedSkins;
+        overlayShown = state.overlayShown;
+        isTyping = state.isTyping;
+        chatBox = state.chatBox;
+        opModeDetected = state.opModeDetected;
+        idLookupSelecting = state.idLookupSelecting;
+        mapCenterSet = state.mapCenterSet;
+        camera = state.camera;
+        target = state.target;
+        cameraTargetBuffer = state.cameraTargetBuffer;
+        lastCameraFrame = state.lastCameraFrame;
+        autoRespawnArmed = state.autoRespawnArmed;
+        autoRespawnTimeout = state.autoRespawnTimeout;
+        hasSpawnedOnce = state.hasSpawnedOnce;
+        mouse = state.mouse;
+        zoomTarget = state.zoomTarget || (state.mouse ? state.mouse.z : 1);
+        frozenMousePos = state.frozenMousePos;
+        frozenMouseUntil = state.frozenMouseUntil;
+    }
+    let zoomTarget = 1;
+    primaryInstance = createClientInstanceState();
+    setActiveClientState(primaryInstance);
+    let secondaryPendingPlay = false;
+    function ensureSecondaryInstance() {
+        if (!secondaryInstance) {
+            secondaryInstance = createClientInstanceState();
+            // share DOM references
+            secondaryInstance.mainCanvas = primaryInstance.mainCanvas;
+            secondaryInstance.mainCtx = primaryInstance.mainCtx;
+            secondaryInstance.chatBox = primaryInstance.chatBox;
+            secondaryInstance.soundsVolume = primaryInstance.soundsVolume;
+            // start with the same zoom as primary
+            if (primaryInstance && primaryInstance.mouse) applyZoomToState(secondaryInstance, primaryInstance.mouse.z || 1);
+            if (primaryInstance && primaryInstance.camera) applyViewMultToState(secondaryInstance, primaryInstance.camera.viewMult);
+        }
+        return secondaryInstance;
+    }
+    // Keep both instances on the same zoom level so switching feels seamless
+    function syncZoom(newZ) {
+        applyZoomToState(primaryInstance, newZ);
+        applyZoomToState(secondaryInstance, newZ);
+        mouse.z = newZ;
+        zoomTarget = newZ;
+    }
+    function toggleActiveInstance() {
+        const target = (activeInstance === primaryInstance) ? ensureSecondaryInstance() : primaryInstance;
+        // align zoom before switching contexts
+        try {
+            const source = activeInstance || primaryInstance;
+            if (source && source.mouse) applyZoomToState(target, source.mouse.z || mouse.z || 1);
+            if (source && source.camera) applyViewMultToState(target, source.camera.viewMult);
+        } catch (e) {}
+        // share current canvas/chat pointers
+        target.mainCanvas = primaryInstance.mainCanvas || target.mainCanvas;
+        target.mainCtx = primaryInstance.mainCtx || target.mainCtx;
+        target.chatBox = primaryInstance.chatBox || target.chatBox;
+        target.soundsVolume = primaryInstance.soundsVolume || target.soundsVolume;
+        setActiveClientState(target);
+        if (activeInstance === secondaryInstance && !ws) {
+            // start second connection on first switch
+            wsInit(WS_URL, secondaryInstance);
+            secondaryPendingPlay = true;
+        } else if (activeInstance === secondaryInstance && ws && ws.readyState === 1 && !hasSpawnedOnce) {
+            try { sendPlay(buildNamePayload()); } catch (e) {}
+        }
+        if (activeInstance === primaryInstance && primaryInstance.ws && primaryInstance.ws.readyState === 1 && !primaryInstance.hasSpawnedOnce) {
+            try { sendPlay(buildNamePayload()); } catch (e) {}
+        }
+        // force auto-respawn behavior for secondary
+        if (activeInstance === secondaryInstance) {
+            settings.autoRespawn = true;
+            autoRespawnArmed = true;
+        }
+        try { if (mainCanvas && typeof mainCanvas.focus === "function") mainCanvas.focus(); } catch (e) {}
+    }
+
+    let pressed = {
+        space: 0,
+        w: 0,
+        e: 0,
+        r: 0,
+        t: 0,
+        p: 0,
+        q: 0,
+        o: 0,
+        m: 0,
+        i: 0,
+        y: 0,
+        u: 0,
+        k: 0,
+        l: 0,
+        h: 0,
+        z: 0,
+        x: 0,
+        s: 0,
+        c: 0,
+        g: 0,
+        j: 0,
+        b: 0,
+        v: 0,
+        n: 0,
+        esc: 0
+    },
         eatSound = new Sound("./assets/sound/eat.mp3", .5, 10),
         pelletSound = new Sound("./assets/sound/pellet.mp3", .5, 10);
+    // Dual multibox control: default enabled for primary, disabled for ?dualChild clones until activated.
+    if (typeof wHandle.__dualInputEnabled === "undefined") wHandle.__dualInputEnabled = !isDualChild;
+    function dualInputActive() {
+        return wHandle.__dualInputEnabled !== false;
+    }
+    wHandle.addEventListener("message", function(evt) {
+        const data = evt && evt.data;
+        if (!data || data.channel !== DUAL_MSG_CHANNEL) return;
+        if (data.type === "set-active") {
+            wHandle.__dualInputEnabled = !!data.active;
+            if (data.active && typeof mainCanvas?.focus === "function") {
+                try { mainCanvas.focus(); } catch (e) {}
+            }
+        } else if (data.type === "play-now") {
+            if (typeof wHandle.playWithSkin === "function") wHandle.playWithSkin();
+            else if (typeof wHandle.play === "function") wHandle.play();
+        } else if (data.type === "focus-canvas") {
+            if (typeof mainCanvas?.focus === "function") {
+                try { mainCanvas.focus(); } catch (e) {}
+            }
+        } else if (data.type === "proxy-key") {
+            if (!dualInputActive()) return;
+            const synthetic = {
+                keyCode: data.keyCode,
+                shiftKey: !!data.shiftKey,
+                ctrlKey: !!data.ctrlKey,
+                altKey: !!data.altKey,
+                metaKey: !!data.metaKey,
+                preventDefault: function() {},
+                stopPropagation: function() {}
+            };
+            if (data.kind === "down" && typeof wHandle.onkeydown === "function") wHandle.onkeydown(synthetic);
+            if (data.kind === "up" && typeof wHandle.onkeyup === "function") wHandle.onkeyup(synthetic);
+        } else if (data.type === "proxy-move") {
+            if (!dualInputActive()) return;
+            mouse.x = data.x;
+            mouse.y = data.y;
+        } else if (data.type === "proxy-wheel") {
+            if (!dualInputActive()) return;
+            if (typeof handleScroll === "function") {
+                handleScroll({wheelDelta: data.wheelDelta, detail: data.deltaY});
+            }
+        } else if (data.type === "proxy-focus") {
+            if (typeof mainCanvas?.focus === "function") {
+                try { mainCanvas.focus(); } catch (e) {}
+            }
+        }
+    });
     const HAT_OPACITY = 0.85;
     const HAT_PRESETS = {
         crown: "https://i.postimg.cc/sxZD5jJn/crown.png",
@@ -478,6 +809,497 @@
         kk2: "https://i.imgur.com/miRxB9s.png"
     };
     const hatImages = {};
+    const DEFAULT_HAT_LAYOUT = {
+        offsetX: 0,
+        offsetY: -1.66,
+        scale: 1,
+        circleOpacity: 0.55
+    };
+    const hatLayouts = new Map();
+    const HAT_PREVIEW_STYLES = `
+.hat-preview-button {
+    width: 100%;
+    border: none;
+    border-radius: 12px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #7b5cff, #c66bff);
+    box-shadow: 0 12px 28px rgba(88, 57, 255, 0.35);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    transition: transform .2s ease, box-shadow .2s ease;
+}
+.hat-preview-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 34px rgba(88, 57, 255, 0.45);
+}
+
+#hat-preview-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9998;
+    padding: 18px;
+}
+#hat-preview-modal.active {
+    display: flex;
+}
+#hat-preview-modal .hat-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+}
+#hat-preview-modal .hat-preview-card {
+    position: relative;
+    width: min(560px, 100vw - 48px);
+    max-height: min(96vh, 760px);
+    background: #0f111a;
+    color: #e5e7f3;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 40px 90px rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 13px;
+    z-index: 9999;
+}
+#hat-preview-modal .hat-preview-card header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+#hat-preview-modal .hat-preview-card header span {
+    font-weight: 600;
+}
+#hat-preview-modal .hat-preview-card header button {
+    background: none;
+    border: none;
+    color: #d3d8ec;
+    font-size: 22px;
+    cursor: pointer;
+}
+#hat-preview-modal .hat-preview-canvas {
+    width: 100%;
+    height: 420px;
+    border-radius: 16px;
+    background: #11131f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
+}
+#hat-preview-modal .hat-preview-code {
+    font-size: 12px;
+    color: #9ba2b5;
+    word-break: break-all;
+}
+#hat-preview-modal .hat-preview-controls {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+#hat-preview-modal .hat-preview-controls label {
+    display: flex;
+    flex-direction: column;
+    font-size: 11px;
+    color: #c2c6d9;
+}
+#hat-preview-modal .hat-preview-controls input[type="number"] {
+    margin-top: 4px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: #0c0d14;
+    color: #fff;
+    font-size: 14px;
+}
+#hat-preview-modal .hat-preview-opacity {
+    gap: 6px;
+}
+#hat-preview-modal .hat-preview-opacity input[type="range"] {
+    margin-top: 6px;
+    width: 100%;
+    appearance: none;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+}
+#hat-preview-modal .hat-preview-opacity input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #c66bff;
+    box-shadow: 0 0 10px rgba(198, 107, 255, 0.6);
+}
+#hat-preview-modal .hat-preview-opacity input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #c66bff;
+    border: none;
+    box-shadow: 0 0 10px rgba(198, 107, 255, 0.6);
+}
+#hat-preview-modal .hat-preview-opacity-value {
+    font-size: 11px;
+    color: #9ba2b5;
+    text-align: right;
+    margin-top: 2px;
+}
+#hat-preview-modal .hat-preview-actions {
+    display: flex;
+    gap: 10px;
+}
+#hat-preview-modal .hat-preview-actions button {
+    flex: 1;
+    background: #1f2030;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 0;
+    cursor: pointer;
+    font-size: 13px;
+}
+#hat-preview-modal .hat-preview-actions button.reset {
+    background: #4a2a2a;
+}
+`;
+    function normalizeLayoutValue(value, fallback) {
+        const num = parseFloat(value);
+        return Number.isFinite(num) ? num : fallback;
+    }
+    function loadHatLayouts() {
+        if (typeof localStorage === "undefined") return;
+        try {
+            const stored = localStorage.getItem("mo_hatLayouts");
+            if (!stored) return;
+            const parsed = JSON.parse(stored);
+            if (!parsed || typeof parsed !== "object") return;
+            Object.entries(parsed).forEach(([code, layout]) => {
+                if (!code || typeof layout !== "object") return;
+                hatLayouts.set(code, {
+                    offsetX: normalizeLayoutValue(layout.offsetX, DEFAULT_HAT_LAYOUT.offsetX),
+                    offsetY: normalizeLayoutValue(layout.offsetY, DEFAULT_HAT_LAYOUT.offsetY),
+                    scale: Math.max(0.1, normalizeLayoutValue(layout.scale, DEFAULT_HAT_LAYOUT.scale)),
+                    circleOpacity: clampNumber(normalizeLayoutValue(layout.circleOpacity, DEFAULT_HAT_LAYOUT.circleOpacity), 0, 1)
+                });
+            });
+        } catch (e) {}
+    }
+    function saveHatLayouts() {
+        if (typeof localStorage === "undefined") return;
+        try {
+            const payload = {};
+            hatLayouts.forEach((layout, code) => {
+                payload[code] = layout;
+            });
+            localStorage.setItem("mo_hatLayouts", JSON.stringify(payload));
+        } catch (e) {}
+    }
+    function getHatLayout(code) {
+        if (!code) return {...DEFAULT_HAT_LAYOUT};
+        const stored = hatLayouts.get(code);
+        if (!stored) return {...DEFAULT_HAT_LAYOUT};
+        return {
+            offsetX: Number.isFinite(stored.offsetX) ? stored.offsetX : DEFAULT_HAT_LAYOUT.offsetX,
+            offsetY: Number.isFinite(stored.offsetY) ? stored.offsetY : DEFAULT_HAT_LAYOUT.offsetY,
+            scale: Math.max(0.1, Number.isFinite(stored.scale) ? stored.scale : DEFAULT_HAT_LAYOUT.scale),
+            circleOpacity: Number.isFinite(stored.circleOpacity) ? clampNumber(stored.circleOpacity, 0, 1) : DEFAULT_HAT_LAYOUT.circleOpacity
+        };
+    }
+    function setHatLayout(code, layout) {
+        if (!code) return null;
+        const normalized = {
+            offsetX: normalizeLayoutValue(layout.offsetX, DEFAULT_HAT_LAYOUT.offsetX),
+            offsetY: normalizeLayoutValue(layout.offsetY, DEFAULT_HAT_LAYOUT.offsetY),
+            scale: Math.max(0.1, normalizeLayoutValue(layout.scale, DEFAULT_HAT_LAYOUT.scale)),
+            circleOpacity: clampNumber(normalizeLayoutValue(layout.circleOpacity, DEFAULT_HAT_LAYOUT.circleOpacity), 0, 1)
+        };
+        hatLayouts.set(code, normalized);
+        saveHatLayouts();
+        return normalized;
+    }
+    function resetHatLayout(code) {
+        if (!code) return;
+        if (hatLayouts.delete(code)) saveHatLayouts();
+    }
+    function injectHatPreviewStyles() {
+        if (typeof document === "undefined" || !document.head) return;
+        if (document.getElementById("hat-preview-styles")) return;
+        const style = document.createElement("style");
+        style.id = "hat-preview-styles";
+        style.textContent = HAT_PREVIEW_STYLES;
+        document.head.appendChild(style);
+    }
+    loadHatLayouts();
+    function resolveSkinUrl(raw) {
+        if (!raw) return null;
+        let src = null;
+        if (/^data:/i.test(raw) || /:\/\//.test(raw) || /^\/\//.test(raw)) {
+            if (raw.indexOf("//") === 0 && USE_HTTPS) src = "https:" + raw;
+            else src = raw;
+        } else if (raw.indexOf("/") !== -1) {
+            src = raw;
+            if (!/\.(png|jpe?g|gif)$/i.test(src)) src = `${src}.png`;
+        } else {
+            src = `${SKIN_URL}${raw}.png`;
+        }
+        return src;
+    }
+    function createHatPreviewUI(hatInput, requestImage, skinSourceFn, openButton) {
+        if (!hatInput || typeof document === "undefined" || !document.body) return null;
+        injectHatPreviewStyles();
+        const triggerButton = openButton || document.createElement("button");
+        if (!openButton) {
+            triggerButton.type = "button";
+            triggerButton.textContent = "Hat preview";
+            document.body.appendChild(triggerButton);
+        }
+        triggerButton.classList.add("hat-preview-button");
+        const modal = document.createElement("div");
+        modal.id = "hat-preview-modal";
+        modal.className = "hat-preview-modal";
+        modal.innerHTML = `
+            <div class="hat-preview-backdrop"></div>
+            <div class="hat-preview-card">
+                <header>
+                    <span>Hat preview</span>
+                    <button type="button" class="hat-preview-close" aria-label="Close preview">&times;</button>
+                </header>
+                <canvas class="hat-preview-canvas" width="420" height="420"></canvas>
+                <div class="hat-preview-code">Code: <span data-hat-code>&mdash;</span></div>
+                <div class="hat-preview-controls">
+                    <label>Offset X<input type="number" step="0.05" data-hat-offset-x></label>
+                    <label>Offset Y<input type="number" step="0.05" data-hat-offset-y></label>
+                    <label>Scale<input type="number" step="0.05" min="0.1" data-hat-scale></label>
+                    <label class="hat-preview-opacity">
+                        Circle opacity
+                        <input type="range" min="0" max="1" step="0.01" data-hat-opacity>
+                        <span class="hat-preview-opacity-value" data-hat-opacity-value>55%</span>
+                    </label>
+                </div>
+                <div class="hat-preview-actions">
+                    <button type="button" class="hat-preview-save">Apply</button>
+                    <button type="button" class="hat-preview-reset reset">Reset</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        const previewCanvas = modal.querySelector(".hat-preview-canvas");
+        const previewCtx = previewCanvas ? previewCanvas.getContext("2d") : null;
+        const hatCodeElement = modal.querySelector("[data-hat-code]");
+        const offsetXInput = modal.querySelector("[data-hat-offset-x]");
+        const offsetYInput = modal.querySelector("[data-hat-offset-y]");
+        const scaleInput = modal.querySelector("[data-hat-scale]");
+        const circleOpacityInput = modal.querySelector("[data-hat-opacity]");
+        const circleOpacityValue = modal.querySelector("[data-hat-opacity-value]");
+        const closeButton = modal.querySelector(".hat-preview-close");
+        const resetButton = modal.querySelector(".hat-preview-reset");
+        const applyButton = modal.querySelector(".hat-preview-save");
+        const skinProvider = typeof skinSourceFn === "function" ? skinSourceFn : () => "";
+
+        let previewSkinImage = null;
+        let previewSkinSrc = "";
+        let previewRadius = 1;
+        let dragState = null;
+
+        function getCurrentHatCode() {
+            if (!hatInput) return "";
+            return buildHatCode(hatInput.value);
+        }
+        function updateOpacityDisplay(value) {
+            if (!circleOpacityValue) return;
+            const safeValue = Number.isFinite(value) ? value : DEFAULT_HAT_LAYOUT.circleOpacity;
+            const percent = Math.round(Math.min(1, Math.max(0, safeValue)) * 100);
+            circleOpacityValue.textContent = `${percent}%`;
+        }
+        function syncControls(code) {
+            const layout = code ? getHatLayout(code) : DEFAULT_HAT_LAYOUT;
+            if (offsetXInput) offsetXInput.value = layout.offsetX.toFixed(2);
+            if (offsetYInput) offsetYInput.value = layout.offsetY.toFixed(2);
+            if (scaleInput) scaleInput.value = layout.scale.toFixed(2);
+            if (circleOpacityInput) circleOpacityInput.value = layout.circleOpacity.toFixed(2);
+            updateOpacityDisplay(layout.circleOpacity);
+            if (hatCodeElement) hatCodeElement.textContent = code || "-";
+        }
+        function resolvePreviewSkin() {
+            const raw = (skinProvider() || "").trim();
+            const src = resolveSkinUrl(raw);
+            if (!src) {
+                previewSkinSrc = "";
+                previewSkinImage = null;
+                return null;
+            }
+            if (previewSkinSrc === src && previewSkinImage) return previewSkinImage;
+            previewSkinImage = new Image();
+            previewSkinImage.crossOrigin = "anonymous";
+            previewSkinImage.onload = renderPreview;
+            previewSkinImage.onerror = () => {
+                previewSkinImage = null;
+                previewSkinSrc = "";
+            };
+            previewSkinImage.src = src;
+            previewSkinSrc = src;
+            return previewSkinImage;
+        }
+        function renderPreview() {
+            if (!previewCtx || !previewCanvas) return;
+            const width = previewCanvas.width;
+            const height = previewCanvas.height;
+            previewCtx.clearRect(0, 0, width, height);
+            previewCtx.fillStyle = "#0c0d14";
+            previewCtx.fillRect(0, 0, width, height);
+            if (previewSkinSrc) {
+                const skin = previewSkinImage || resolvePreviewSkin();
+                if (skin && skin.complete && skin.width && skin.height) {
+                    previewCtx.save();
+                    previewCtx.beginPath();
+                    previewCtx.arc(width / 2, height / 2, Math.min(width, height) * 0.35, 0, PI_2);
+                    previewCtx.clip();
+                    previewCtx.drawImage(skin, width / 2 - 120, height / 2 - 120, 240, 240);
+                    previewCtx.restore();
+                }
+            }
+            const code = getCurrentHatCode();
+            const layout = getHatLayout(code);
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = Math.min(centerX, centerY) * 0.45;
+            previewRadius = radius;
+            previewCtx.beginPath();
+            previewCtx.arc(centerX, centerY, radius, 0, PI_2);
+            previewCtx.save();
+            previewCtx.globalAlpha = layout.circleOpacity;
+            previewCtx.fillStyle = "#1a1c26";
+            previewCtx.fill();
+            previewCtx.restore();
+            previewCtx.lineWidth = 2;
+            previewCtx.strokeStyle = "rgba(255,255,255,0.15)";
+            previewCtx.stroke();
+            if (!code) return;
+            const fakeS = radius;
+            const drawSize = Math.max(2, fakeS * 2 * layout.scale);
+            const hatX = centerX + layout.offsetX * fakeS - drawSize / 2;
+            const hatY = centerY + layout.offsetY * fakeS - drawSize / 2;
+            const img = getHatImageFromCode(code);
+            if (img) {
+                if (img.complete && img.width && img.height) {
+                    previewCtx.save();
+                    previewCtx.globalAlpha = HAT_OPACITY;
+                    previewCtx.drawImage(img, hatX, hatY, drawSize, drawSize);
+                    previewCtx.restore();
+                } else {
+                    img.addEventListener("load", renderPreview, {once: true});
+                }
+            }
+        }
+        function updateLayoutFromInputs() {
+            const code = getCurrentHatCode();
+            if (!code) return;
+            const updated = setHatLayout(code, {
+                offsetX: normalizeLayoutValue(offsetXInput.value, DEFAULT_HAT_LAYOUT.offsetX),
+                offsetY: normalizeLayoutValue(offsetYInput.value, DEFAULT_HAT_LAYOUT.offsetY),
+                scale: normalizeLayoutValue(scaleInput.value, DEFAULT_HAT_LAYOUT.scale),
+                circleOpacity: circleOpacityInput ? circleOpacityInput.value : DEFAULT_HAT_LAYOUT.circleOpacity
+            });
+            updateOpacityDisplay(updated.circleOpacity);
+            renderPreview();
+        }
+        function resetLayout() {
+            const code = getCurrentHatCode();
+            if (!code) return;
+            resetHatLayout(code);
+            syncControls(code);
+            renderPreview();
+        }
+        function openModal() {
+            syncControls(getCurrentHatCode());
+            requestImage && requestImage();
+            resolvePreviewSkin();
+            renderPreview();
+            modal.classList.add("active");
+        }
+        function closeModal() {
+            modal.classList.remove("active");
+            if (dragState) {
+                previewCanvas && previewCanvas.releasePointerCapture(dragState.pointerId);
+            }
+            dragState = null;
+        }
+        function startDrag(evt) {
+            if (!previewCanvas || !evt.isPrimary) return;
+            const code = getCurrentHatCode();
+            if (!code) return;
+            dragState = {
+                pointerId: evt.pointerId,
+                startX: evt.offsetX,
+                startY: evt.offsetY,
+                layout: {...getHatLayout(code)},
+                normalizer: Math.max(1, previewRadius)
+            };
+            previewCanvas.setPointerCapture(evt.pointerId);
+        }
+        function moveDrag(evt) {
+            if (!dragState || dragState.pointerId !== evt.pointerId) return;
+            const dx = (evt.offsetX - dragState.startX) / dragState.normalizer;
+            const dy = (evt.offsetY - dragState.startY) / dragState.normalizer;
+            const code = getCurrentHatCode();
+            if (!code) return;
+            const updated = {
+                offsetX: dragState.layout.offsetX + dx,
+                offsetY: dragState.layout.offsetY + dy,
+                scale: dragState.layout.scale
+            };
+            setHatLayout(code, updated);
+            syncControls(code);
+            renderPreview();
+        }
+        function endDrag(evt) {
+            if (!dragState || dragState.pointerId !== evt.pointerId) return;
+            previewCanvas && previewCanvas.releasePointerCapture(evt.pointerId);
+            dragState = null;
+        }
+
+        triggerButton.addEventListener("click", openModal);
+        applyButton && applyButton.addEventListener("click", updateLayoutFromInputs);
+        resetButton && resetButton.addEventListener("click", resetLayout);
+        closeButton && closeButton.addEventListener("click", closeModal);
+        modal.querySelector(".hat-preview-backdrop")?.addEventListener("click", closeModal);
+        document.addEventListener("keydown", (evt) => {
+            if (evt.key === "Escape" && modal.classList.contains("active")) closeModal();
+        });
+
+        if (offsetXInput) offsetXInput.addEventListener("input", updateLayoutFromInputs);
+        if (offsetYInput) offsetYInput.addEventListener("input", updateLayoutFromInputs);
+        if (scaleInput) scaleInput.addEventListener("input", updateLayoutFromInputs);
+        if (circleOpacityInput) circleOpacityInput.addEventListener("input", updateLayoutFromInputs);
+
+        if (previewCanvas) {
+            previewCanvas.addEventListener("pointerdown", startDrag);
+            previewCanvas.addEventListener("pointermove", moveDrag);
+            previewCanvas.addEventListener("pointerup", endDrag);
+            previewCanvas.addEventListener("pointerleave", endDrag);
+            previewCanvas.addEventListener("pointercancel", endDrag);
+        }
+
+        return {
+            refresh() {
+                const code = getCurrentHatCode();
+                syncControls(code);
+                resolvePreviewSkin();
+                requestImage && requestImage();
+                renderPreview();
+            },
+            open: openModal,
+            close: closeModal
+        };
+    }
+
     function normalizeNameColor(raw) {
         let hex = (raw || "").trim();
         if (!hex) return "";
@@ -570,6 +1392,7 @@
         ws.onclose = null;
         ws.close();
         ws = null;
+        if (activeInstance) activeInstance.ws = null;
     }
     function resolveWsUrl(rawUrl) {
         if (!rawUrl) return DEFAULT_WSS;
@@ -588,7 +1411,13 @@
         const protocol = USE_HTTPS && !url.includes("127.0.0.1") ? "wss" : "ws";
         return `${protocol}://${url}`;
     }
-    function wsInit(url) {
+    function wsInit(url, targetState) {
+        const tState = targetState || activeInstance;
+        // Avoid spawning duplicate sockets for the same state
+        if (tState.ws && tState.ws.readyState !== WebSocket.CLOSED && tState.ws.readyState !== WebSocket.CLOSING) {
+            return;
+        }
+        setActiveClientState(tState);
         if (ws) {
             log.debug("websocket init on existing connection!");
             wsCleanup();
@@ -596,11 +1425,32 @@
         wjQuery("#connecting").show();
         WS_URL = resolveWsUrl(url);
         ws = new WebSocket(WS_URL);
+        tState.ws = ws;
         ws.binaryType = "arraybuffer";
-        ws.onopen = wsOpen;
-        ws.onmessage = wsMessage;
-        ws.onerror = wsError;
-        ws.onclose = wsClose;
+        ws.onopen = () => {
+            const prev = activeInstance;
+            setActiveClientState(tState);
+            wsOpen();
+            setActiveClientState(prev);
+        };
+        ws.onmessage = (evt) => {
+            const prev = activeInstance;
+            setActiveClientState(tState);
+            wsMessage(evt);
+            setActiveClientState(prev);
+        };
+        ws.onerror = (err) => {
+            const prev = activeInstance;
+            setActiveClientState(tState);
+            wsError(err);
+            setActiveClientState(prev);
+        };
+        ws.onclose = (evt) => {
+            const prev = activeInstance;
+            setActiveClientState(tState);
+            wsClose(evt);
+            setActiveClientState(prev);
+        };
     }
     function wsOpen() {
         isConnected = 1;
@@ -614,6 +1464,10 @@
             sendSetNickSkin(buildNamePayload());
         } catch (e) {
             console.error && console.error("Failed to sync name/skin on connect:", e);
+        }
+        if (activeInstance === secondaryInstance && secondaryPendingPlay) {
+            try { sendPlay(buildNamePayload()); } catch (e) {}
+            secondaryPendingPlay = false;
         }
     }
     function wsError(error) {
@@ -656,6 +1510,7 @@
             color,
             name,
             skin;
+        const ownerTag = activeInstance === primaryInstance ? "primary" : "secondary";
         switch (packetId) {
             case 0x10: // Update nodes
                 // Consume records
@@ -695,8 +1550,16 @@
                         if (color) cell.setColor(color);
                         if (skin) cell.setSkin(skin);
                         if (name) cell.setName(name);
+                        if (cells.mine.indexOf(id) !== -1) {
+                            markCellOwner(id, ownerTag);
+                            cell.setOwner(ownerTag);
+                        }
                     } else {
                         cell = new Cell(id, x, y, s, name, color, skin, flags);
+                        if (cells.mine.indexOf(id) !== -1) {
+                            markCellOwner(id, ownerTag);
+                            cell.setOwner(ownerTag);
+                        }
                         cells.byId.set(id, cell);
                         cells.list.push(cell);
                     }
@@ -715,8 +1578,10 @@
                 break;
             case 0x12: // Clear all
                 for (let cell of cells.byId.values()) cell.destroy(null);
+                clearCellOwners(ownerTag);
             case 0x14: // Clear my cells
                 cells.mine = [];
+                clearCellOwners(ownerTag);
                 autoRespawnArmed = true;
                 showOverlay();
                 break;
@@ -724,7 +1589,11 @@
                 log.warn("Got packet 0x15 (draw line) which is unsupported!");
                 break;
             case 0x20: // New cell
-                cells.mine.push(reader.getUint32());
+                const newId = reader.getUint32();
+                cells.mine.push(newId);
+                markCellOwner(newId, ownerTag);
+                playerIdsByInstance[ownerTag] = playerIdsByInstance[ownerTag] || newId;
+                if (cells.byId.has(newId)) cells.byId.get(newId).setOwner(ownerTag);
                 hasSpawnedOnce = true;
                 autoRespawnArmed = false;
                 if (autoRespawnTimeout) {
@@ -936,6 +1805,7 @@
         chat.messages = [];
         window.__minimapPlayers = [];
         window.__myPlayerId = null;
+        clearCellOwners();
         setOpDetected(false);
         idLookupSelecting = false;
         leaderboard.items = [];
@@ -996,6 +1866,7 @@
         }, 220);
     }
     function showOverlay() {
+        if (activeInstance !== primaryInstance || isDualChild) return;
         // Respect temporary suppression (e.g., during respawn)
         try {
             if (window.__suppressOverlayUntil && Date.now() < window.__suppressOverlayUntil) return;
@@ -1166,22 +2037,36 @@
         if (leaderboard.type === NaN) return leaderboard.visible = 0;
         if (!settings.showNames || !leaderboard.items || !leaderboard.items.length) return leaderboard.visible = 0;
         leaderboard.visible = 1;
-        let canvas = leaderboard.canvas,
-            ctx = canvas.getContext("2d"),
-            len = leaderboard.items.length;
-        canvas.width = 260;
-        canvas.height = leaderboard.type !== "pie" ? 70 + 26 * len : 240;
+        const canvas = leaderboard.canvas;
+        const ctx = canvas.getContext("2d");
+        const len = leaderboard.items.length;
+        const padding = 13;
+        const titleSize = 24;
+        const titleMargin = 6;
+        const lineHeight = 24;
+        const baseHeight = padding + titleSize + titleMargin + lineHeight * len + padding;
+        canvas.width = 220;
+        canvas.height = leaderboard.type !== "pie" ? Math.max(272, baseHeight) : 240;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.globalAlpha = 1;
-        // glassy background
-        ctx.fillStyle = "rgba(10,10,12,0.78)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = "rgba(255,255,255,0.08)";
+        // Background styled to match requested CSS
+        ctx.fillStyle = "rgba(10, 10, 12, 0.7)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
         ctx.lineWidth = 1;
-        ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
-        ctx.fillStyle = "#eaeaea";
-        ctx.font = "700 22px Arial";
-        ctx.fillText("Leaderboard", canvas.width / 2 - ctx.measureText("Leaderboard").width / 2, 34);
+        if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(0.5, 0.5, canvas.width - 1, canvas.height - 1, 4);
+            ctx.fill();
+            ctx.stroke();
+        } else {
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
+        }
+        ctx.fillStyle = "#fff";
+        ctx.font = `${titleSize}px Arial`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillText("Leaderboard", padding, padding);
         if (leaderboard.type === "pie") {
             let last = 0;
             for (let i = 0; i < len; i++) {
@@ -1195,7 +2080,8 @@
         } else {
             let text,
                 isMe = 0;
-            ctx.font = "16px Arial";
+            ctx.font = "18px Arial";
+            const startY = padding + titleSize + titleMargin;
             for (let i = 0; i < len; i++) {
                 if (leaderboard.type === "text") text = leaderboard.items[i];
                 else {
@@ -1210,32 +2096,47 @@
                 ctx.fillStyle = nameHex;
                 if (leaderboard.type === "ffa") text = (i + 1) + ". " + (text || "An unnamed cell");
                 ctx.textAlign = "left";
-                ctx.fillText(text, 14, 62 + 26 * i);
+                ctx.fillText(text, padding, startY + lineHeight * i);
             }
         }
     }
     function drawGrid() {
+        if (!border || !isFinite(border.width) || !isFinite(border.height) || !border.width || !border.height) {
+            return;
+        }
+        const GRID_DIVISIONS = 5;
+        const GRID_STEP = 50;
+
         mainCtx.save();
         mainCtx.lineWidth = 1;
-        mainCtx.strokeStyle = settings.darkTheme ? "#AAA" : "#000";
-        mainCtx.globalAlpha = .2;
-        let step = 50,
-            i,
-            cW = mainCanvas.width / camera.z,
-            cH = mainCanvas.height / camera.z,
-            startLeft = (-camera.x + cW / 2) % step,
-            startTop = (-camera.y + cH / 2) % step;
-        scaleForth(mainCtx);
+        mainCtx.strokeStyle = "#202020";
+        mainCtx.globalAlpha = 0.1;
         mainCtx.beginPath();
-        for (i = startLeft; i < cW; i += step) {
-            mainCtx.moveTo(i, 0);
-            mainCtx.lineTo(i, cH);
+
+        for (let i = 1; i < GRID_DIVISIONS; i++) {
+            const x = border.left + (border.width / GRID_DIVISIONS) * i;
+            mainCtx.moveTo(x, border.top);
+            mainCtx.lineTo(x, border.bottom);
+
+            const y = border.top + (border.height / GRID_DIVISIONS) * i;
+            mainCtx.moveTo(border.left, y);
+            mainCtx.lineTo(border.right, y);
         }
-        for (i = startTop; i < cH; i += step) {
-            mainCtx.moveTo(0, i);
-            mainCtx.lineTo(cW, i);
+
+        const startX = Math.floor(border.left / GRID_STEP) * GRID_STEP;
+        const endX = border.right;
+        for (let x = startX; x <= endX; x += GRID_STEP) {
+            mainCtx.moveTo(x, border.top);
+            mainCtx.lineTo(x, border.bottom);
         }
-        mainCtx.closePath();
+
+        const startY = Math.floor(border.top / GRID_STEP) * GRID_STEP;
+        const endY = border.bottom;
+        for (let y = startY; y <= endY; y += GRID_STEP) {
+            mainCtx.moveTo(border.left, y);
+            mainCtx.lineTo(border.right, y);
+        }
+
         mainCtx.stroke();
         mainCtx.restore();
     }
@@ -1458,8 +2359,8 @@
         mainCtx.save();
         mainCtx.fillStyle = settings.darkTheme ? "#111" : "#F2FBFF";
         mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
-        if (!settings.hideGrid) drawGrid();
         toCamera(mainCtx);
+        if (!settings.hideGrid) drawGrid();
         drawBorders();
         drawSectors();
         for (let i = 0; i < drawList.length; i++) drawList[i].draw(mainCtx);
@@ -1557,7 +2458,7 @@
 
         if (settings.autoZoom) {
             const autoZoomAlpha = lerpFromPercent(Math.max(settings.cameraZoomSpeed * 0.75, 8), frameDelta);
-            mouse.z += (1 - mouse.z) * autoZoomAlpha;
+            syncZoom(mouse.z + (1 - mouse.z) * autoZoomAlpha);
         }
 
         const animScale = animationScale();
@@ -1566,10 +2467,15 @@
 
         camera.x += (laggedTarget.x - camera.x) * panAlpha;
         camera.y += (laggedTarget.y - camera.y) * panAlpha;
-        const zoomTarget = settings.autoZoom
-            ? (laggedTarget.z || 1) * camera.viewMult * mouse.z
-            : camera.viewMult * mouse.z;
-        camera.z += (zoomTarget - camera.z) * zoomAlpha;
+        // Smooth toward user-controlled zoomTarget; autoZoom still scales around it
+        if (settings.autoZoom) {
+            zoomTarget += ((laggedTarget.z || 1) * camera.viewMult * mouse.z - zoomTarget) * 0.1;
+        }
+        // ease mouse.z toward target for smoother scroll feel
+        const zoomLerp = 0.22;
+        const newMouseZ = mouse.z + (zoomTarget - mouse.z) * zoomLerp;
+        syncZoom(newMouseZ);
+        camera.z += (camera.viewMult * mouse.z - camera.z) * zoomAlpha;
         camera.zScale = 1 / camera.z;
     }
     class Cell {
@@ -1603,6 +2509,7 @@
         }
         destroy(killerId) {
             cells.byId.delete(this.id);
+            unmarkCellOwner(this.id);
             if (cells.mine.remove(this.id) && !cells.mine.length) {
                 autoRespawnArmed = true;
                 showOverlay();
@@ -1724,6 +2631,9 @@
             this.nameColor = parsed.nameColor ? ("#" + parsed.nameColor) : null;
             this.hatCode = parsed.hatCode;
         }
+        setOwner(value) {
+            this.ownerInstance = value || "primary";
+        }
         setSkin(value) {
             this.skin = (value && value[0] === "%" ? value.slice(1) : value) || this.skin;
             if (this.skin == null || loadedSkins[this.skin]) return;
@@ -1760,12 +2670,19 @@
         drawShape(ctx) {
             if (settings.hideFood && this.food) return;
             const isMine = cells.mine.indexOf(this.id) !== -1;
-            ctx.fillStyle = settings.showColor ? this.color : Cell.prototype.color;
+            const isPrimaryOwned = CELL_OWNERS.primary.has(this.id);
+            const isSecondaryOwned = CELL_OWNERS.secondary.has(this.id);
+            const isOurCell = isPrimaryOwned || isSecondaryOwned;
+            const isActiveInstance = (activeInstance === primaryInstance) ? isPrimaryOwned : isSecondaryOwned;
+            const hasVisibleSkin = settings.showSkins && this.skin && (isMine || settings.showOtherSkins);
+            ctx.fillStyle = hasVisibleSkin ? "#000" : (settings.showColor ? this.color : Cell.prototype.color);
             let color = String($("#cellBorderColor").val());
             ctx.strokeStyle = color.length === 3 || color.length === 6 ? "#" + color : settings.showColor ? this.sColor : Cell.prototype.sColor;
             ctx.lineWidth = this.jagged ? 12 : Math.max(~~(this.s / 50), 10);
-            let showCellBorder = settings.cellBorders && !this.food && !this.ejected && 20 < this.s;
-            if (showCellBorder) this.s -= ctx.lineWidth / 2 - 2;
+            let showCellBorder = settings.cellBorders && !this.food && !this.ejected && 20 < this.s && !hasVisibleSkin;
+            // If a skin is visible, skip the base stroke entirely
+            const drawBaseStroke = showCellBorder && !hasVisibleSkin;
+            if (drawBaseStroke) this.s -= ctx.lineWidth / 2 - 2;
             ctx.beginPath();
             if (this.jagged) ctx.lineJoin = "miter";
             if (settings.jellyPhysics && this.points.length) {
@@ -1798,16 +2715,30 @@
                 let skin = loadedSkins[this.skin];
                 if (skin && skin.complete && skin.width && skin.height) {
                     ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.s, 0, PI_2, false);
+                    ctx.closePath();
                     ctx.clip();
                     scaleBack(ctx);
-                    let sScaled = this.s * camera.z;
+                    let sScaled = this.s * camera.z * 1.04; // slightly overdraw to cover any edge bleed
                     if (settings.jellyPhysics) sScaled += 3;
                     ctx.drawImage(skin, this.x * camera.z - sScaled, this.y * camera.z - sScaled, sScaled *= 2, sScaled);
                     scaleForth(ctx);
                     ctx.restore();
                 }
             }
-            if (showCellBorder) this.s += ctx.lineWidth / 2 - 2;
+            // Multibox highlight: only our cells (tracked sets), active instance = magenta border, inactive = white border
+            if (isOurCell && !this.food && !this.ejected && dualInputActive() && secondaryInstance) {
+                ctx.save();
+                const lw = Math.max(this.s * 0.06, 12); // slightly thinner but still visible
+                ctx.lineWidth = lw;
+                ctx.strokeStyle = isActiveInstance ? "#ff00ff" : "#ffffff";
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.s + lw * 0.5 + 2, 0, PI_2, false);
+                ctx.stroke();
+                ctx.restore();
+            }
+            if (drawBaseStroke) this.s += ctx.lineWidth / 2 - 2;
         }
         drawHat(ctx) {
             const hatInput = document.getElementById('hatUrl');
@@ -1823,8 +2754,12 @@
             if (!img || !img.complete || !img.width || !img.height) return;
             ctx.save();
             ctx.globalAlpha = HAT_OPACITY;
-            const drawSize = this.s * 2;
-            ctx.drawImage(img, this.x - this.s, this.y - this.s - this.s * 1.66, drawSize, drawSize);
+            const layout = getHatLayout(code);
+            const baseSize = this.s * 2;
+            const drawSize = Math.max(2, baseSize * layout.scale);
+            const hatX = this.x + layout.offsetX * this.s - drawSize / 2;
+            const hatY = this.y + layout.offsetY * this.s - drawSize / 2;
+            ctx.drawImage(img, hatX, hatY, drawSize, drawSize);
             ctx.restore();
         }
         drawText(ctx) {
@@ -2047,36 +2982,35 @@
             return formatNickSkinHat(nickVal, skinVal, hatVal, colorVal);
         }
         wHandle.buildNamePayload = buildNamePayload;
+        function getSkinRawValue() {
+            let raw = (skinInput && skinInput.value && skinInput.value.trim()) || (nickInput && (function(){
+                let m = /\{([\w\W]+?)\}/.exec(nickInput.value);
+                return m ? m[1] : '';
+            })()) || '';
+            return (raw || '').trim();
+        }
         function prefetchHatFromInput() {
             if (!hatInput) return;
             const hatCode = buildHatCode(hatInput.value);
             if (hatCode) getHatImageFromCode(hatCode);
         }
+        const hatPreviewButton = document.getElementById('openHatPreview');
+        const hatPreviewUI = hatInput ? createHatPreviewUI(hatInput, prefetchHatFromInput, getSkinRawValue, hatPreviewButton) : null;
         function updateSkinPreview() {
             try {
-                let raw = (skinInput && skinInput.value && skinInput.value.trim()) || (nickInput && (function(){
-                    let m = /\{([\w\W]+?)\}/.exec(nickInput.value);
-                    return m ? m[1] : '';
-                })()) || '';
                 if (!skinPreview) return;
-                raw = raw.trim();
+                const raw = getSkinRawValue();
                 if (!raw) {
                     skinPreview.style.backgroundImage = "";
                     skinPreview.style.backgroundColor = '#eee';
                     return;
                 }
-                // Resolve URL similar to cell setSkin logic
-                let src = null;
-                if (/^data:/i.test(raw) || /:\/\//.test(raw) || /^\/\//.test(raw)) {
-                    if (raw.indexOf('//') === 0 && USE_HTTPS) src = 'https:' + raw;
-                    else src = raw;
-                } else if (raw.indexOf('/') !== -1) {
-                    src = raw;
-                    if (!/\.(png|jpg|jpeg|gif)$/i.test(src)) src = `${src}.png`;
-                } else {
-                    src = `${SKIN_URL}${raw}.png`;
+                const src = resolveSkinUrl(raw);
+                if (!src) {
+                    skinPreview.style.backgroundImage = "";
+                    skinPreview.style.backgroundColor = '#eee';
+                    return;
                 }
-                // Load image to ensure validity then set as background
                 let img = new Image();
                 img.crossOrigin = 'anonymous';
                 img.onload = function() {
@@ -2106,9 +3040,15 @@
                     const hatCode = buildHatCode(hatVal);
                     if (hatCode) getHatImageFromCode(hatCode);
                     sendSetNickSkin(buildNamePayload());
+                    hatPreviewUI && hatPreviewUI.refresh();
                 } catch (e) {}
             });
+            hatInput.addEventListener('input', function() {
+                prefetchHatFromInput();
+                hatPreviewUI && hatPreviewUI.refresh();
+            });
         }
+        hatPreviewUI && hatPreviewUI.refresh();
         if (nameColorInput) {
             try { nameColorInput.value = localStorage.getItem('mo_nameColor') || ""; } catch (e) {}
             nameColorInput.addEventListener('blur', function() {
@@ -2129,23 +3069,32 @@
             } catch (e) {}
         }
         if (skinInput) {
-            skinInput.addEventListener('input', updateSkinPreview);
+            skinInput.addEventListener('input', function() {
+                updateSkinPreview();
+                hatPreviewUI && hatPreviewUI.refresh();
+            });
             skinInput.addEventListener('blur', function() {
                 try {
                     let skin = (skinInput.value || "").trim();
                     try { localStorage.setItem('mo_skin', skin); } catch (e) {}
                     sendSetNickSkin(buildNamePayload());
+                    updateSkinPreview();
+                    hatPreviewUI && hatPreviewUI.refresh();
                 } catch (e) {}
             });
             // ensure preview on load if value already present
             if (skinInput.value && skinInput.value.trim()) updateSkinPreview();
         }
         if (nickInput) {
-            nickInput.addEventListener('input', updateSkinPreview);
+            nickInput.addEventListener('input', function() {
+                updateSkinPreview();
+                hatPreviewUI && hatPreviewUI.refresh();
+            });
             nickInput.addEventListener('blur', function() {
                 try {
                     sendSetNickSkin(buildNamePayload());
                 } catch (e) {}
+                hatPreviewUI && hatPreviewUI.refresh();
             });
             nickInput.addEventListener('keydown', function(e) {
                 if (e.keyCode === 13) { // Enter: commit name change
@@ -2158,22 +3107,27 @@
         soundsVolume = document.getElementById("soundsVolume");
         mainCanvas.focus();
         function handleScroll(event) {
-            const delta = (event.wheelDelta / -120) || event.detail || 0;
+            if (!dualInputActive()) return;
+            const rawDelta = (event.wheelDelta / -120) || event.detail || 0;
+            // amplify wheel input a bit but still cap extremes for touchpads
+            const delta = Math.max(-6, Math.min(6, rawDelta * 1.6));
             const base = settings.infiniteZoom ? 0.90 : 0.95;
             const sensitivity = clampNumber(settings.scrollZoomRate || 100, 10, 400) / 100;
             const adjustedBase = 1 - (1 - base) * sensitivity;
-            mouse.z *= Math.pow(adjustedBase, delta);
-            if (!settings.infiniteZoom && mouse.z < 1) mouse.z = 1;
+            let newZ = zoomTarget;
+            newZ *= Math.pow(adjustedBase, delta);
+            if (!settings.infiniteZoom && newZ < 1) newZ = 1;
             // Relax zoom ceiling when infiniteZoom is on
-            const maxZoom = settings.infiniteZoom ? 1e6 : (4 / mouse.z);
-            if (mouse.z > maxZoom) mouse.z = maxZoom;
-            if (settings.infiniteZoom && mouse.z < 0.05) mouse.z = 0.05;
+            const maxZoom = settings.infiniteZoom ? 1e6 : (4 / Math.max(newZ, 0.001));
+            if (newZ > maxZoom) newZ = maxZoom;
+            if (settings.infiniteZoom && newZ < 0.005) newZ = 0.005;
+            zoomTarget = newZ;
         }
-        if (/firefox/i.test(navigator.userAgent)) document.addEventListener("DOMMouseScroll", handleScroll, 0);
-        else document.body.onmousewheel = handleScroll;
-        // Load user bindings (if any) and fall back to defaults.
-        let __userBindings = {};
-        function loadBindings() {
+            if (/firefox/i.test(navigator.userAgent)) document.addEventListener("DOMMouseScroll", handleScroll, 0);
+            else document.body.onmousewheel = handleScroll;
+            // Load user bindings (if any) and fall back to defaults.
+            let __userBindings = {};
+            function loadBindings() {
             try {
                 __userBindings = JSON.parse(localStorage.getItem('mo_bindings')) || {};
                 ['minionSplit','minionEject','minionFreeze','minionCollect','minionFollow','multiSplitShift','multiSplitA','multiSplitD'].forEach(k => { delete __userBindings[k]; });
@@ -2227,7 +3181,15 @@
         }
 
         wHandle.onkeydown = function(event) {
+            if (!dualInputActive()) return;
             const kc = event.keyCode;
+            if (kc === 81 && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+                if (!isTyping && !overlayShown) {
+                    toggleActiveInstance();
+                }
+                event.preventDefault();
+                return;
+            }
             // Enter/Chat
             if (kc === 13) {
                 if (overlayShown) return;
@@ -2541,6 +3503,7 @@
         };
 
         wHandle.onkeyup = function(event) {
+            if (!dualInputActive()) return;
             const kc = event.keyCode;
             if (kc === __B.split) {
                 pressed.space = 0;
@@ -2639,6 +3602,7 @@
             drawChat();
         };
         mainCanvas.onmousemove = function(event) {
+            if (!dualInputActive()) return;
             // Ignore real mouse while a freeze position is active
             if (frozenMouseUntil && Date.now() < frozenMouseUntil) return;
             mouse.x = event.clientX;
@@ -2776,16 +3740,35 @@
             wsSend(writer);
         }
 
-        // Diagonal trigger: simulate pressing line-lock (W) and a user split key (V) once
+        // Diagonal trigger: compute a line toward the mouse and ask the server to burst splits along it
         function doDiagonalLinesplit() {
-            triggerKeyCode(87); // W lock
-            triggerKeyCode(86); // V split
+            if (!ws || ws.readyState !== 1) return;
+            const cx = mainCanvas.width / 2;
+            const cy = mainCanvas.height / 2;
+            const mx = isNaN(mouse.x) ? cx : mouse.x;
+            const my = isNaN(mouse.y) ? cy : mouse.y;
+            const center = getOwnCenter() || { x: camera.x, y: camera.y };
+            const worldMouse = clientToWorld(mx, my);
+            let dirX = worldMouse.x - center.x;
+            let dirY = worldMouse.y - center.y;
+            const mag = Math.sqrt(dirX * dirX + dirY * dirY);
+            if (!mag) return;
+            dirX /= mag;
+            dirY /= mag;
+            sendLinesplitBurst(dirX, dirY, 3);
+            sendLinesplitLock(dirX, dirY);
             // keep indicator visible briefly
-            if (lineLockIndicator) lineLockIndicator.style.display = 'block';
+            if (lineLockIndicator) {
+                lineLockIndicator.style.display = 'block';
+                setTimeout(() => { lineLockIndicator.style.display = 'none'; }, 500);
+            }
+            // Auto-unlock after a short delay so the line stays straight while the burst completes
             setTimeout(() => {
-                triggerKeyCode(87); // W unlock shortly after
+                sendLinesplitLock(0, 0);
+                lineLockActive = false;
+                lineLockDir = null;
                 if (lineLockIndicator) lineLockIndicator.style.display = 'none';
-            }, 500);
+            }, 250);
         }
 
         function triggerKeyCode(kc) {
@@ -2825,6 +3808,7 @@
         });
 
         mainCanvas.onmousedown = function(event) {
+            if (!dualInputActive()) return;
             // Mouse hotkeys (LMB=-1, MMB=-2, RMB=-3) via mo_bindings
             const mcode = mouseButtonToCode(event.button);
             if (isMouseBinding(mcode)) {
@@ -2869,6 +3853,7 @@
         };
 
         mainCanvas.onmouseup = function(event) {
+            if (!dualInputActive()) return;
             const mcode = mouseButtonToCode(event.button);
             if (isMouseBinding(mcode)) {
                 event.preventDefault();
@@ -2891,6 +3876,7 @@
             sendChat("Teleport mode: COMPLETED.");
         };
         setInterval(() => { // Send mouse update
+            if (!dualInputActive()) return;
             if (frozenMouseUntil && Date.now() < frozenMouseUntil && frozenMousePos) {
                 sendMouseMove(frozenMousePos.x, frozenMousePos.y);
             } else {
@@ -2902,7 +3888,10 @@
         wHandle.onresize = function() {
             let cW = mainCanvas.width = wHandle.innerWidth,
                 cH = mainCanvas.height = wHandle.innerHeight;
-            camera.viewMult = Math.sqrt(Math.min(cH / 1080, cW / 1920));
+            const viewMult = Math.sqrt(Math.min(cH / 1080, cW / 1920));
+            camera.viewMult = viewMult;
+            applyViewMultToState(primaryInstance, viewMult);
+            applyViewMultToState(secondaryInstance, viewMult);
         };
         wHandle.onresize();
         log.info(`Init completed in ${Date.now() - DATE}ms`);
@@ -2913,12 +3902,12 @@
             let div = /ip=([\w\W]+):([0-9]+)/.exec(wHandle.location.search.slice(1));
             if (div) wsTarget = `${div[1]}:${div[2]}`;
         }
-        wsInit(wsTarget);
+        wsInit(wsTarget, primaryInstance);
         window.requestAnimationFrame(drawGame);
     }
     wHandle.setServer = function(arg) {
         if (WS_URL === arg) return;
-        wsInit(arg);
+        wsInit(arg, primaryInstance);
     };
     wHandle.formatNickSkinHat = formatNickSkinHat;
     wHandle.setSkins = function(arg) {
