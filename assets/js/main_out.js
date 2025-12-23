@@ -82,6 +82,11 @@
         const safeNum = isNaN(num) ? 0 : num;
         return Math.min(Math.max(safeNum, min), max);
     }
+    function getRenderScale() {
+        const rs = clampNumber(settings.renderScale || 1, 0.3, 1.5);
+        settings.renderScale = rs;
+        return rs;
+    }
     // Rounded rect helper for canvas
     if (!CanvasRenderingContext2D.prototype.roundRect) {
         CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
@@ -102,11 +107,12 @@
         row.className = "chatbox-message" + (entry.system ? " system" : "");
         const sender = document.createElement("span");
         sender.className = "sender";
-        sender.textContent = (entry.name || "").trim() + (entry.name ? ":" : "");
+        const hasName = (entry.name || "").trim().length > 0;
+        sender.textContent = hasName ? ((entry.name || "").trim() + ": ") : "";
         // Choose sender color: system tint, else explicit self flag uses own picker, else entry-provided/white.
         let chosenColor = "#ffffff";
         if (entry.system) {
-            chosenColor = "#9aa0b5";
+            chosenColor = "#ffffff"; // system messages white
         } else {
             let selfColor = "#ffffff";
             try { selfColor = resolveNameColor(); } catch (e) {}
@@ -115,6 +121,7 @@
             else if (entry.color) chosenColor = entry.color;
         }
         sender.style.color = chosenColor;
+        sender.style.display = hasName ? "inline" : "none";
         const text = document.createElement("span");
         text.className = "text";
         text.textContent = entry.message || "";
@@ -272,10 +279,14 @@
     let log = new Logger(),
         SKIN_URL = "./skins/",
         USE_HTTPS = "https:" == wHandle.location.protocol,
-        DEFAULT_WSS = "wss://game.linkease.me",
+        // By default do NOT auto-connect. Users must select a server in the UI.
+        // If you want an auto-connect target for development, set this to a ws:// URL.
+        // Default WSS host for production. Set to your public websocket domain exposed via Cloudflare Tunnel.
+        DEFAULT_WSS = 'wss://game.linkease.me',
         CELL_POINTS_MIN = 5,
         CELL_POINTS_MAX = 120,
         PI_2 = Math.PI * 2,
+        VIEW_SCALE_BASE = 8,
         UINT8_254 = new Uint8Array([254, 6, 0, 0, 0]),
         UINT8_255 = new Uint8Array([255, 1, 0, 0, 0]),
         UINT8 = {
@@ -336,15 +347,49 @@
             transparency: false,
             mapBorders: false,
             sectors: false,
-            showPos: false,
-            autoZoom: false,
-            autoRespawn: false,
-            drawDelayMs: 120,
+        showPos: false,
+        autoZoom: false,
+        autoRespawn: false,
+        shortMass: true,
+        showOtherMass: true,
+            renderScale: 1,
+            lockViewMult: true,
+            drawDelayMs: 0.4,
             cameraPanSpeed: 22,
             cameraZoomSpeed: 14,
             scrollZoomRate: 100,
             allowGETipSet: false
         },
+        // Debugging toggle for bind timing (set true to log key/mouse bind events)
+        BIND_DEBUG = false,
+        // Lightweight logger for input/events to help compare keyboard vs mouse timing
+        __bindStats = (function(){
+            try { if (!window.__bindStats) window.__bindStats = { inputs: [], actions: [], _lastInput: null }; } catch(e) { return { inputs: [], actions: [], _lastInput: null }; }
+            return window.__bindStats;
+        })(),
+
+        // Expose helper to dump/compute bind timing stats from the console
+        __dumpBindStats = (function() {
+            try {
+                window.__dumpBindStats = function() {
+                    const s = window.__bindStats || { inputs: [], actions: [] };
+                    const rows = (s.actions || []).map(a => {
+                        const li = a.lastInput || null;
+                        return {
+                            opcode: a.opcode,
+                            actionTime: a.t,
+                            inputTime: li ? li.t : null,
+                            inputKey: li ? li.kc : null,
+                            inputOrigin: li ? li.origin : null,
+                            deltaMs: li ? (a.t - li.t) : null
+                        };
+                    });
+                    try { console.table(rows); } catch (e) { console.log(rows); }
+                    return rows;
+                };
+            } catch (e) {}
+            return null;
+        })(),
         // per-instance bindings (will be assigned via setActiveState)
         cells,
         border,
@@ -460,14 +505,20 @@
                 const v3 = getBool(3); if (v3 !== undefined) settings.darkTheme = v3;
                 const v21 = getBool(21); if (v21 !== undefined) settings.autoZoom = v21;
                 const v22 = getBool(22); if (v22 !== undefined) settings.autoRespawn = v22;
+                const v23 = getBool(23);
+                // Checkbox-23 now means "show full mass numbers". Default is short format (shortMass = true).
+                if (v23 !== undefined) settings.shortMass = !v23;
+                const v24 = getBool(24); if (v24 !== undefined) settings.showOtherMass = v24;
                 const drawDelay = wHandle.localStorage.getItem("mo_drawDelay");
-                if (drawDelay !== null && !isNaN(parseFloat(drawDelay))) settings.drawDelayMs = Math.max(0, Math.min(400, parseFloat(drawDelay)));
+                if (drawDelay !== null && !isNaN(parseFloat(drawDelay))) settings.drawDelayMs = clampNumber(parseFloat(drawDelay), 0, 1);
                 const panSpeed = wHandle.localStorage.getItem("mo_cameraPan");
                 if (panSpeed !== null && !isNaN(parseFloat(panSpeed))) settings.cameraPanSpeed = Math.max(1, Math.min(200, parseFloat(panSpeed)));
                 const zoomSpeed = wHandle.localStorage.getItem("mo_cameraZoom");
                 if (zoomSpeed !== null && !isNaN(parseFloat(zoomSpeed))) settings.cameraZoomSpeed = Math.max(1, Math.min(200, parseFloat(zoomSpeed)));
                 const scrollRate = wHandle.localStorage.getItem("mo_scrollZoomRate");
                 if (scrollRate !== null && !isNaN(parseFloat(scrollRate))) settings.scrollZoomRate = Math.max(10, Math.min(400, parseFloat(scrollRate)));
+                const renderScale = wHandle.localStorage.getItem("mo_renderScale");
+                if (renderScale !== null && !isNaN(parseFloat(renderScale))) settings.renderScale = clampNumber(parseFloat(renderScale), 0.3, 1.5);
             } catch (e) {}
         })();
 
@@ -558,7 +609,9 @@
             },
             zoomTarget: 1,
             frozenMousePos: null,
-            frozenMouseUntil: 0
+            frozenMouseUntil: 0,
+            lineLockActive: false,
+            lineLockDir: null
         };
     }
     // Mirror a zoom value into a given client state (mouse + camera)
@@ -616,9 +669,12 @@
         activeInstance.zoomTarget = zoomTarget;
         activeInstance.frozenMousePos = frozenMousePos;
         activeInstance.frozenMouseUntil = frozenMouseUntil;
+        activeInstance.lineLockActive = lineLockActive;
+        activeInstance.lineLockDir = lineLockDir;
     }
     function setActiveClientState(state) {
         persistActiveClientState();
+        clearLineLockInterval();
         activeInstance = state;
         cells = state.cells;
         border = state.border;
@@ -658,6 +714,66 @@
         zoomTarget = state.zoomTarget || (state.mouse ? state.mouse.z : 1);
         frozenMousePos = state.frozenMousePos;
         frozenMouseUntil = state.frozenMouseUntil;
+        lineLockActive = !!state.lineLockActive;
+        lineLockDir = state.lineLockDir || null;
+        restartLineLockInterval();
+        updateLineLockIndicator();
+    }
+    function resetVisibilityCaches(target) {
+        const tgt = target || activeInstance;
+        if (!tgt) return;
+        tgt.minimapSmooth = new Map();
+        tgt.minimapLastFrame = performance.now();
+        tgt.ghostCells = new Map();
+        tgt.lastSeenCells = new Map();
+        if (tgt === activeInstance) {
+            minimapSmooth = tgt.minimapSmooth;
+            minimapLastFrame = tgt.minimapLastFrame;
+            ghostCells = tgt.ghostCells;
+            lastSeenCells = tgt.lastSeenCells;
+        }
+    }
+
+    let lineLockActive = false;
+    let lineLockDir = null;
+    let lineLockInterval = null;
+    let lineLockIndicatorCached = null;
+    function lineLockIndicatorEl() {
+        if (lineLockIndicatorCached && document.body && document.body.contains(lineLockIndicatorCached)) {
+            return lineLockIndicatorCached;
+        }
+        const el = document.getElementById('lineLockIndicator');
+        if (el) lineLockIndicatorCached = el;
+        return el;
+    }
+    function updateLineLockIndicator() {
+        const lineLockIndicator = lineLockIndicatorEl();
+        if (!lineLockIndicator) return;
+        if (lineLockActive) {
+            lineLockIndicator.textContent = 'LINESPLITTING';
+            lineLockIndicator.style.display = 'block';
+        } else {
+            lineLockIndicator.textContent = '';
+            lineLockIndicator.style.display = 'none';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', updateLineLockIndicator);
+    function clearLineLockInterval() {
+        if (lineLockInterval) {
+            clearInterval(lineLockInterval);
+            lineLockInterval = null;
+        }
+    }
+    function restartLineLockInterval() {
+        clearLineLockInterval();
+        if (!lineLockActive || !lineLockDir) return;
+        if (typeof sendLinesplitLock !== "function") return;
+        sendLinesplitLock(lineLockDir.x, lineLockDir.y);
+        lineLockInterval = setInterval(function() {
+            if (!lineLockDir || !lineLockActive) return;
+            if (typeof sendLinesplitLock !== "function") return;
+            sendLinesplitLock(lineLockDir.x, lineLockDir.y);
+        }, 250);
     }
     let zoomTarget = 1;
     primaryInstance = createClientInstanceState();
@@ -671,6 +787,7 @@
             secondaryInstance.mainCtx = primaryInstance.mainCtx;
             secondaryInstance.chatBox = primaryInstance.chatBox;
             secondaryInstance.soundsVolume = primaryInstance.soundsVolume;
+            secondaryInstance.WS_URL = WS_URL;
             // start with the same zoom as primary
             if (primaryInstance && primaryInstance.mouse) applyZoomToState(secondaryInstance, primaryInstance.mouse.z || 1);
             if (primaryInstance && primaryInstance.camera) applyViewMultToState(secondaryInstance, primaryInstance.camera.viewMult);
@@ -747,6 +864,7 @@
         pelletSound = new Sound("./assets/sound/pellet.mp3", .5, 10);
     // Dual multibox control: default enabled for primary, disabled for ?dualChild clones until activated.
     if (typeof wHandle.__dualInputEnabled === "undefined") wHandle.__dualInputEnabled = !isDualChild;
+    let dualNeedsSync = false;
     function dualInputActive() {
         return wHandle.__dualInputEnabled !== false;
     }
@@ -815,228 +933,9 @@
         scale: 1,
         circleOpacity: 0.55
     };
-    const hatLayouts = new Map();
-    const HAT_PREVIEW_STYLES = `
-.hat-preview-button {
-    width: 100%;
-    border: none;
-    border-radius: 12px;
-    padding: 10px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #fff;
-    background: linear-gradient(135deg, #7b5cff, #c66bff);
-    box-shadow: 0 12px 28px rgba(88, 57, 255, 0.35);
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: .6px;
-    transition: transform .2s ease, box-shadow .2s ease;
-}
-.hat-preview-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 16px 34px rgba(88, 57, 255, 0.45);
-}
-
-#hat-preview-modal {
-    position: fixed;
-    inset: 0;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 9998;
-    padding: 18px;
-}
-#hat-preview-modal.active {
-    display: flex;
-}
-#hat-preview-modal .hat-preview-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.72);
-}
-#hat-preview-modal .hat-preview-card {
-    position: relative;
-    width: min(560px, 100vw - 48px);
-    max-height: min(96vh, 760px);
-    background: #0f111a;
-    color: #e5e7f3;
-    border-radius: 18px;
-    padding: 18px;
-    box-shadow: 0 40px 90px rgba(0, 0, 0, 0.8);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    font-size: 13px;
-    z-index: 9999;
-}
-#hat-preview-modal .hat-preview-card header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-#hat-preview-modal .hat-preview-card header span {
-    font-weight: 600;
-}
-#hat-preview-modal .hat-preview-card header button {
-    background: none;
-    border: none;
-    color: #d3d8ec;
-    font-size: 22px;
-    cursor: pointer;
-}
-#hat-preview-modal .hat-preview-canvas {
-    width: 100%;
-    height: 420px;
-    border-radius: 16px;
-    background: #11131f;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
-}
-#hat-preview-modal .hat-preview-code {
-    font-size: 12px;
-    color: #9ba2b5;
-    word-break: break-all;
-}
-#hat-preview-modal .hat-preview-controls {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-}
-#hat-preview-modal .hat-preview-controls label {
-    display: flex;
-    flex-direction: column;
-    font-size: 11px;
-    color: #c2c6d9;
-}
-#hat-preview-modal .hat-preview-controls input[type="number"] {
-    margin-top: 4px;
-    padding: 6px 8px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    background: #0c0d14;
-    color: #fff;
-    font-size: 14px;
-}
-#hat-preview-modal .hat-preview-opacity {
-    gap: 6px;
-}
-#hat-preview-modal .hat-preview-opacity input[type="range"] {
-    margin-top: 6px;
-    width: 100%;
-    appearance: none;
-    height: 6px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.15);
-    cursor: pointer;
-}
-#hat-preview-modal .hat-preview-opacity input[type="range"]::-webkit-slider-thumb {
-    appearance: none;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #c66bff;
-    box-shadow: 0 0 10px rgba(198, 107, 255, 0.6);
-}
-#hat-preview-modal .hat-preview-opacity input[type="range"]::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #c66bff;
-    border: none;
-    box-shadow: 0 0 10px rgba(198, 107, 255, 0.6);
-}
-#hat-preview-modal .hat-preview-opacity-value {
-    font-size: 11px;
-    color: #9ba2b5;
-    text-align: right;
-    margin-top: 2px;
-}
-#hat-preview-modal .hat-preview-actions {
-    display: flex;
-    gap: 10px;
-}
-#hat-preview-modal .hat-preview-actions button {
-    flex: 1;
-    background: #1f2030;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 0;
-    cursor: pointer;
-    font-size: 13px;
-}
-#hat-preview-modal .hat-preview-actions button.reset {
-    background: #4a2a2a;
-}
-`;
-    function normalizeLayoutValue(value, fallback) {
-        const num = parseFloat(value);
-        return Number.isFinite(num) ? num : fallback;
+    function getHatLayout() {
+        return {...DEFAULT_HAT_LAYOUT};
     }
-    function loadHatLayouts() {
-        if (typeof localStorage === "undefined") return;
-        try {
-            const stored = localStorage.getItem("mo_hatLayouts");
-            if (!stored) return;
-            const parsed = JSON.parse(stored);
-            if (!parsed || typeof parsed !== "object") return;
-            Object.entries(parsed).forEach(([code, layout]) => {
-                if (!code || typeof layout !== "object") return;
-                hatLayouts.set(code, {
-                    offsetX: normalizeLayoutValue(layout.offsetX, DEFAULT_HAT_LAYOUT.offsetX),
-                    offsetY: normalizeLayoutValue(layout.offsetY, DEFAULT_HAT_LAYOUT.offsetY),
-                    scale: Math.max(0.1, normalizeLayoutValue(layout.scale, DEFAULT_HAT_LAYOUT.scale)),
-                    circleOpacity: clampNumber(normalizeLayoutValue(layout.circleOpacity, DEFAULT_HAT_LAYOUT.circleOpacity), 0, 1)
-                });
-            });
-        } catch (e) {}
-    }
-    function saveHatLayouts() {
-        if (typeof localStorage === "undefined") return;
-        try {
-            const payload = {};
-            hatLayouts.forEach((layout, code) => {
-                payload[code] = layout;
-            });
-            localStorage.setItem("mo_hatLayouts", JSON.stringify(payload));
-        } catch (e) {}
-    }
-    function getHatLayout(code) {
-        if (!code) return {...DEFAULT_HAT_LAYOUT};
-        const stored = hatLayouts.get(code);
-        if (!stored) return {...DEFAULT_HAT_LAYOUT};
-        return {
-            offsetX: Number.isFinite(stored.offsetX) ? stored.offsetX : DEFAULT_HAT_LAYOUT.offsetX,
-            offsetY: Number.isFinite(stored.offsetY) ? stored.offsetY : DEFAULT_HAT_LAYOUT.offsetY,
-            scale: Math.max(0.1, Number.isFinite(stored.scale) ? stored.scale : DEFAULT_HAT_LAYOUT.scale),
-            circleOpacity: Number.isFinite(stored.circleOpacity) ? clampNumber(stored.circleOpacity, 0, 1) : DEFAULT_HAT_LAYOUT.circleOpacity
-        };
-    }
-    function setHatLayout(code, layout) {
-        if (!code) return null;
-        const normalized = {
-            offsetX: normalizeLayoutValue(layout.offsetX, DEFAULT_HAT_LAYOUT.offsetX),
-            offsetY: normalizeLayoutValue(layout.offsetY, DEFAULT_HAT_LAYOUT.offsetY),
-            scale: Math.max(0.1, normalizeLayoutValue(layout.scale, DEFAULT_HAT_LAYOUT.scale)),
-            circleOpacity: clampNumber(normalizeLayoutValue(layout.circleOpacity, DEFAULT_HAT_LAYOUT.circleOpacity), 0, 1)
-        };
-        hatLayouts.set(code, normalized);
-        saveHatLayouts();
-        return normalized;
-    }
-    function resetHatLayout(code) {
-        if (!code) return;
-        if (hatLayouts.delete(code)) saveHatLayouts();
-    }
-    function injectHatPreviewStyles() {
-        if (typeof document === "undefined" || !document.head) return;
-        if (document.getElementById("hat-preview-styles")) return;
-        const style = document.createElement("style");
-        style.id = "hat-preview-styles";
-        style.textContent = HAT_PREVIEW_STYLES;
-        document.head.appendChild(style);
-    }
-    loadHatLayouts();
     function resolveSkinUrl(raw) {
         if (!raw) return null;
         let src = null;
@@ -1051,255 +950,6 @@
         }
         return src;
     }
-    function createHatPreviewUI(hatInput, requestImage, skinSourceFn, openButton) {
-        if (!hatInput || typeof document === "undefined" || !document.body) return null;
-        injectHatPreviewStyles();
-        const triggerButton = openButton || document.createElement("button");
-        if (!openButton) {
-            triggerButton.type = "button";
-            triggerButton.textContent = "Hat preview";
-            document.body.appendChild(triggerButton);
-        }
-        triggerButton.classList.add("hat-preview-button");
-        const modal = document.createElement("div");
-        modal.id = "hat-preview-modal";
-        modal.className = "hat-preview-modal";
-        modal.innerHTML = `
-            <div class="hat-preview-backdrop"></div>
-            <div class="hat-preview-card">
-                <header>
-                    <span>Hat preview</span>
-                    <button type="button" class="hat-preview-close" aria-label="Close preview">&times;</button>
-                </header>
-                <canvas class="hat-preview-canvas" width="420" height="420"></canvas>
-                <div class="hat-preview-code">Code: <span data-hat-code>&mdash;</span></div>
-                <div class="hat-preview-controls">
-                    <label>Offset X<input type="number" step="0.05" data-hat-offset-x></label>
-                    <label>Offset Y<input type="number" step="0.05" data-hat-offset-y></label>
-                    <label>Scale<input type="number" step="0.05" min="0.1" data-hat-scale></label>
-                    <label class="hat-preview-opacity">
-                        Circle opacity
-                        <input type="range" min="0" max="1" step="0.01" data-hat-opacity>
-                        <span class="hat-preview-opacity-value" data-hat-opacity-value>55%</span>
-                    </label>
-                </div>
-                <div class="hat-preview-actions">
-                    <button type="button" class="hat-preview-save">Apply</button>
-                    <button type="button" class="hat-preview-reset reset">Reset</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        const previewCanvas = modal.querySelector(".hat-preview-canvas");
-        const previewCtx = previewCanvas ? previewCanvas.getContext("2d") : null;
-        const hatCodeElement = modal.querySelector("[data-hat-code]");
-        const offsetXInput = modal.querySelector("[data-hat-offset-x]");
-        const offsetYInput = modal.querySelector("[data-hat-offset-y]");
-        const scaleInput = modal.querySelector("[data-hat-scale]");
-        const circleOpacityInput = modal.querySelector("[data-hat-opacity]");
-        const circleOpacityValue = modal.querySelector("[data-hat-opacity-value]");
-        const closeButton = modal.querySelector(".hat-preview-close");
-        const resetButton = modal.querySelector(".hat-preview-reset");
-        const applyButton = modal.querySelector(".hat-preview-save");
-        const skinProvider = typeof skinSourceFn === "function" ? skinSourceFn : () => "";
-
-        let previewSkinImage = null;
-        let previewSkinSrc = "";
-        let previewRadius = 1;
-        let dragState = null;
-
-        function getCurrentHatCode() {
-            if (!hatInput) return "";
-            return buildHatCode(hatInput.value);
-        }
-        function updateOpacityDisplay(value) {
-            if (!circleOpacityValue) return;
-            const safeValue = Number.isFinite(value) ? value : DEFAULT_HAT_LAYOUT.circleOpacity;
-            const percent = Math.round(Math.min(1, Math.max(0, safeValue)) * 100);
-            circleOpacityValue.textContent = `${percent}%`;
-        }
-        function syncControls(code) {
-            const layout = code ? getHatLayout(code) : DEFAULT_HAT_LAYOUT;
-            if (offsetXInput) offsetXInput.value = layout.offsetX.toFixed(2);
-            if (offsetYInput) offsetYInput.value = layout.offsetY.toFixed(2);
-            if (scaleInput) scaleInput.value = layout.scale.toFixed(2);
-            if (circleOpacityInput) circleOpacityInput.value = layout.circleOpacity.toFixed(2);
-            updateOpacityDisplay(layout.circleOpacity);
-            if (hatCodeElement) hatCodeElement.textContent = code || "-";
-        }
-        function resolvePreviewSkin() {
-            const raw = (skinProvider() || "").trim();
-            const src = resolveSkinUrl(raw);
-            if (!src) {
-                previewSkinSrc = "";
-                previewSkinImage = null;
-                return null;
-            }
-            if (previewSkinSrc === src && previewSkinImage) return previewSkinImage;
-            previewSkinImage = new Image();
-            previewSkinImage.crossOrigin = "anonymous";
-            previewSkinImage.onload = renderPreview;
-            previewSkinImage.onerror = () => {
-                previewSkinImage = null;
-                previewSkinSrc = "";
-            };
-            previewSkinImage.src = src;
-            previewSkinSrc = src;
-            return previewSkinImage;
-        }
-        function renderPreview() {
-            if (!previewCtx || !previewCanvas) return;
-            const width = previewCanvas.width;
-            const height = previewCanvas.height;
-            previewCtx.clearRect(0, 0, width, height);
-            previewCtx.fillStyle = "#0c0d14";
-            previewCtx.fillRect(0, 0, width, height);
-            if (previewSkinSrc) {
-                const skin = previewSkinImage || resolvePreviewSkin();
-                if (skin && skin.complete && skin.width && skin.height) {
-                    previewCtx.save();
-                    previewCtx.beginPath();
-                    previewCtx.arc(width / 2, height / 2, Math.min(width, height) * 0.35, 0, PI_2);
-                    previewCtx.clip();
-                    previewCtx.drawImage(skin, width / 2 - 120, height / 2 - 120, 240, 240);
-                    previewCtx.restore();
-                }
-            }
-            const code = getCurrentHatCode();
-            const layout = getHatLayout(code);
-            const centerX = width / 2;
-            const centerY = height / 2;
-            const radius = Math.min(centerX, centerY) * 0.45;
-            previewRadius = radius;
-            previewCtx.beginPath();
-            previewCtx.arc(centerX, centerY, radius, 0, PI_2);
-            previewCtx.save();
-            previewCtx.globalAlpha = layout.circleOpacity;
-            previewCtx.fillStyle = "#1a1c26";
-            previewCtx.fill();
-            previewCtx.restore();
-            previewCtx.lineWidth = 2;
-            previewCtx.strokeStyle = "rgba(255,255,255,0.15)";
-            previewCtx.stroke();
-            if (!code) return;
-            const fakeS = radius;
-            const drawSize = Math.max(2, fakeS * 2 * layout.scale);
-            const hatX = centerX + layout.offsetX * fakeS - drawSize / 2;
-            const hatY = centerY + layout.offsetY * fakeS - drawSize / 2;
-            const img = getHatImageFromCode(code);
-            if (img) {
-                if (img.complete && img.width && img.height) {
-                    previewCtx.save();
-                    previewCtx.globalAlpha = HAT_OPACITY;
-                    previewCtx.drawImage(img, hatX, hatY, drawSize, drawSize);
-                    previewCtx.restore();
-                } else {
-                    img.addEventListener("load", renderPreview, {once: true});
-                }
-            }
-        }
-        function updateLayoutFromInputs() {
-            const code = getCurrentHatCode();
-            if (!code) return;
-            const updated = setHatLayout(code, {
-                offsetX: normalizeLayoutValue(offsetXInput.value, DEFAULT_HAT_LAYOUT.offsetX),
-                offsetY: normalizeLayoutValue(offsetYInput.value, DEFAULT_HAT_LAYOUT.offsetY),
-                scale: normalizeLayoutValue(scaleInput.value, DEFAULT_HAT_LAYOUT.scale),
-                circleOpacity: circleOpacityInput ? circleOpacityInput.value : DEFAULT_HAT_LAYOUT.circleOpacity
-            });
-            updateOpacityDisplay(updated.circleOpacity);
-            renderPreview();
-        }
-        function resetLayout() {
-            const code = getCurrentHatCode();
-            if (!code) return;
-            resetHatLayout(code);
-            syncControls(code);
-            renderPreview();
-        }
-        function openModal() {
-            syncControls(getCurrentHatCode());
-            requestImage && requestImage();
-            resolvePreviewSkin();
-            renderPreview();
-            modal.classList.add("active");
-        }
-        function closeModal() {
-            modal.classList.remove("active");
-            if (dragState) {
-                previewCanvas && previewCanvas.releasePointerCapture(dragState.pointerId);
-            }
-            dragState = null;
-        }
-        function startDrag(evt) {
-            if (!previewCanvas || !evt.isPrimary) return;
-            const code = getCurrentHatCode();
-            if (!code) return;
-            dragState = {
-                pointerId: evt.pointerId,
-                startX: evt.offsetX,
-                startY: evt.offsetY,
-                layout: {...getHatLayout(code)},
-                normalizer: Math.max(1, previewRadius)
-            };
-            previewCanvas.setPointerCapture(evt.pointerId);
-        }
-        function moveDrag(evt) {
-            if (!dragState || dragState.pointerId !== evt.pointerId) return;
-            const dx = (evt.offsetX - dragState.startX) / dragState.normalizer;
-            const dy = (evt.offsetY - dragState.startY) / dragState.normalizer;
-            const code = getCurrentHatCode();
-            if (!code) return;
-            const updated = {
-                offsetX: dragState.layout.offsetX + dx,
-                offsetY: dragState.layout.offsetY + dy,
-                scale: dragState.layout.scale
-            };
-            setHatLayout(code, updated);
-            syncControls(code);
-            renderPreview();
-        }
-        function endDrag(evt) {
-            if (!dragState || dragState.pointerId !== evt.pointerId) return;
-            previewCanvas && previewCanvas.releasePointerCapture(evt.pointerId);
-            dragState = null;
-        }
-
-        triggerButton.addEventListener("click", openModal);
-        applyButton && applyButton.addEventListener("click", updateLayoutFromInputs);
-        resetButton && resetButton.addEventListener("click", resetLayout);
-        closeButton && closeButton.addEventListener("click", closeModal);
-        modal.querySelector(".hat-preview-backdrop")?.addEventListener("click", closeModal);
-        document.addEventListener("keydown", (evt) => {
-            if (evt.key === "Escape" && modal.classList.contains("active")) closeModal();
-        });
-
-        if (offsetXInput) offsetXInput.addEventListener("input", updateLayoutFromInputs);
-        if (offsetYInput) offsetYInput.addEventListener("input", updateLayoutFromInputs);
-        if (scaleInput) scaleInput.addEventListener("input", updateLayoutFromInputs);
-        if (circleOpacityInput) circleOpacityInput.addEventListener("input", updateLayoutFromInputs);
-
-        if (previewCanvas) {
-            previewCanvas.addEventListener("pointerdown", startDrag);
-            previewCanvas.addEventListener("pointermove", moveDrag);
-            previewCanvas.addEventListener("pointerup", endDrag);
-            previewCanvas.addEventListener("pointerleave", endDrag);
-            previewCanvas.addEventListener("pointercancel", endDrag);
-        }
-
-        return {
-            refresh() {
-                const code = getCurrentHatCode();
-                syncControls(code);
-                resolvePreviewSkin();
-                requestImage && requestImage();
-                renderPreview();
-            },
-            open: openModal,
-            close: closeModal
-        };
-    }
-
     function normalizeNameColor(raw) {
         let hex = (raw || "").trim();
         if (!hex) return "";
@@ -1424,6 +1074,8 @@
         }
         wjQuery("#connecting").show();
         WS_URL = resolveWsUrl(url);
+        if (tState) tState.WS_URL = WS_URL;
+        console.info("[client] wsInit ->", WS_URL);
         ws = new WebSocket(WS_URL);
         tState.ws = ws;
         ws.binaryType = "arraybuffer";
@@ -1461,12 +1113,13 @@
         log.debug(`WS connected, using https: ${USE_HTTPS}`);
         log.info("Socket open.");
         try {
-            sendSetNickSkin(buildNamePayload());
+            const payload = buildNamePayload(activeInstance === secondaryInstance);
+            sendSetNickSkin(payload);
         } catch (e) {
             console.error && console.error("Failed to sync name/skin on connect:", e);
         }
         if (activeInstance === secondaryInstance && secondaryPendingPlay) {
-            try { sendPlay(buildNamePayload()); } catch (e) {}
+            try { sendPlay(buildNamePayload(true)); } catch (e) {}
             secondaryPendingPlay = false;
         }
     }
@@ -1488,8 +1141,26 @@
     function wsSend(data) {
         if (!ws) return;
         if (ws.readyState !== 1) return;
-        if (data.build) ws.send(data.build());
-        else ws.send(data);
+        try {
+            // Capture opcode for logging when possible
+            try {
+                const rec = typeof __bindStats !== 'undefined' && __bindStats;
+                if (rec) {
+                    let arr = null;
+                    if (data && data.build) {
+                        try { arr = data.build(); } catch (e) { arr = null; }
+                    } else if (data instanceof Uint8Array) {
+                        arr = data;
+                    } else if (data && data[0] != null) {
+                        try { arr = new Uint8Array(data); } catch (e) { arr = null; }
+                    }
+                    const opcode = (arr && arr.length) ? arr[0] : null;
+                    rec.actions.push({ opcode: opcode, t: Date.now(), lastInput: rec._lastInput });
+                }
+            } catch (e) {}
+            if (data.build) ws.send(data.build());
+            else ws.send(data);
+        } catch (e) {}
     }
     function wsMessage(data) {
         syncUpdStamp = Date.now();
@@ -1671,9 +1342,13 @@
                     server = !!(flags & 0x80),
                     admin = !!(flags & 0x40),
                     mod = !!(flags & 0x20);
-                if (server && name !== "SERVER") name = "[SERVER] " + name;
-                if (admin) name = "[ADMIN] " + name;
-                if (mod) name = "[MOD] " + name;
+                // For server/system messages, drop the sender label entirely; otherwise add admin/mod tags
+                if (server) {
+                    name = "";
+                } else {
+                    if (admin) name = "[ADMIN] " + name;
+                    if (mod) name = "[MOD] " + name;
+                }
                 let wait = Math.max(3000, 1000 + message.length * 150);
                 chat.waitUntil = syncUpdStamp - chat.waitUntil > 1000 ? syncUpdStamp + wait : chat.waitUntil + wait;
                 const entryColor = parsedChatName.nameColor ? ("#" + parsedChatName.nameColor) : "#FFF";
@@ -1861,12 +1536,27 @@
             try { window.__suppressOverlayUntil = Date.now() + 1500; } catch (e) {}
             try {
                 if (typeof wHandle.playWithSkin === "function") { wHandle.playWithSkin(); return; }
-                if (typeof wHandle.play === "function") wHandle.play(buildNamePayload());
+                if (activeInstance === secondaryInstance && dualNeedsSync && secondaryInstance && secondaryInstance.ws && secondaryInstance.ws.readyState === 1) {
+                    try { sendSetNickSkinTo(secondaryInstance, buildNamePayload(true)); dualNeedsSync = false; } catch (e) {}
+                }
+                // clear ghost caches before respawn to avoid stale ghost cells
+                resetVisibilityCaches(activeInstance);
+                if (typeof wHandle.play === "function") wHandle.play(buildNamePayload(activeInstance === secondaryInstance));
+                // If we're on the secondary instance, ensure it actually respawns
+                if (activeInstance === secondaryInstance && secondaryInstance) {
+                    // If the socket is already open, send play immediately; otherwise flag pending play.
+                    if (ws && ws.readyState === 1) {
+                        try { sendPlayTo(secondaryInstance, buildNamePayload(true)); } catch (e) {}
+                        secondaryPendingPlay = false;
+                    } else {
+                        secondaryPendingPlay = true;
+                    }
+                }
             } catch (e) {}
         }, 220);
     }
-    function showOverlay() {
-        if (activeInstance !== primaryInstance || isDualChild) return;
+    function showOverlay(force) {
+        if (!force && (activeInstance !== primaryInstance || isDualChild)) return;
         // Respect temporary suppression (e.g., during respawn)
         try {
             if (window.__suppressOverlayUntil && Date.now() < window.__suppressOverlayUntil) return;
@@ -1988,6 +1678,10 @@
         if (num >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
         return `${num}`;
     }
+    function formatMassDisplay(num) {
+        const n = Math.max(0, Math.floor(num));
+        return settings.shortMass ? prettyPrintNumber(n) : n.toString();
+    }
     function prettyPrintTime(seconds) {
         seconds = ~~seconds;
         let minutes = ~~(seconds / 60);
@@ -2012,8 +1706,8 @@
         const lines = [];
         lines.push(`FPS: ${smoothFps}`);
         lines.push(`Ping: ${ping}`);
-        if (massVal > 0) lines.push(`Mass: ${prettyPrintNumber(massVal)}`);
-        if (scoreVal > 0) lines.push(`Score: ${prettyPrintNumber(scoreVal)}`);
+        if (massVal > 0) lines.push(`Mass: ${formatMassDisplay(massVal)}`);
+        if (scoreVal > 0) lines.push(`Score: ${formatMassDisplay(scoreVal)}`);
         if (cellsCount > 0) lines.push(`Cells: ${cellsCount}`);
         const font = "14px Nunito, Arial, sans-serif";
         const lineHeight = 18;
@@ -2387,9 +2081,8 @@
         return 1 - Math.pow(1 - rate, deltaMs / 16.7);
     }
     function animationScale() {
-        const delay = clampNumber(settings.drawDelayMs || 0, 0, 400);
-        // 0ms = 1x speed, 400ms ≈ 0.3x speed
-        return 1 / (1 + delay / 140);
+        // Draw delay slider now represents a 0-1 smoothing weight; keep animation scale neutral.
+        return 1;
     }
     function pushCameraTargetState(now, tx, ty, tz) {
         cameraTargetBuffer.push({t: now, x: tx, y: ty, z: tz});
@@ -2428,19 +2121,23 @@
         if (myCells.length > 0) {
             let x = 0,
                 y = 0,
-                s = 0,
+                totalMass = 0,
                 score = 0,
                 len = myCells.length;
             for (let i = 0; i < len; i++) {
                 let cell = myCells[i];
-                score += ~~(cell.ns * cell.ns / 100);
+                const cellMass = (cell.ns * cell.ns) / 100;
+                score += ~~cellMass;
+                totalMass += cellMass;
                 x += cell.x;
                 y += cell.y;
-                s += cell.s;
             }
             nextTarget.x = x / len;
             nextTarget.y = y / len;
-            nextTarget.z = Math.pow(Math.min(24 / s, 1), .4);
+            if (totalMass > 0) {
+                const equivalentSize = Math.sqrt(totalMass * 100);
+                nextTarget.z = Math.pow(Math.min(VIEW_SCALE_BASE / equivalentSize, 1), .4);
+            } else nextTarget.z = 1;
             stats.score = score;
             stats.maxScore = Math.max(stats.maxScore, score);
         } else {
@@ -2452,9 +2149,8 @@
         target.z = nextTarget.z || 1;
 
         pushCameraTargetState(now, target.x, target.y, target.z);
-        // Animation delay taps into render/game smoothing instead of only camera.
-        const lagMs = clampNumber(settings.drawDelayMs || 0, 0, 400);
-        const laggedTarget = sampleCameraTarget(now, lagMs);
+        // Draw delay slider now feeds render smoothing (animationScale), so camera uses the latest target directly.
+        const laggedTarget = target;
 
         if (settings.autoZoom) {
             const autoZoomAlpha = lerpFromPercent(Math.max(settings.cameraZoomSpeed * 0.75, 8), frameDelta);
@@ -2512,7 +2208,8 @@
             unmarkCellOwner(this.id);
             if (cells.mine.remove(this.id) && !cells.mine.length) {
                 autoRespawnArmed = true;
-                showOverlay();
+                // Force overlay so auto-respawn triggers even when secondary is active
+                showOverlay(true);
             }
             this.destroyed = 1;
             this.dead = syncUpdStamp;
@@ -2533,9 +2230,10 @@
             const prevFrameSize = this.rs;
             const frameMs = Math.max(1, now - this.lastFrame);
             this.lastFrame = now;
-            // Convert frame time to a smoothing alpha (target ~0.32 per 60 FPS frame)
+            // Convert frame time to a smoothing alpha; slider value (0-1) defaults to 0.4 but the / value was 16.7 i cahnged to 106.7 makes it feel slower
             const animScaleFactor = animationScale();
-            const alpha = 1 - Math.pow(1 - 0.15 * animScaleFactor, frameMs / 16.7);
+            const weight = clampNumber(settings.drawDelayMs || 0, 0, 1);
+            const alpha = 1 - Math.pow(1 - weight * animScaleFactor, frameMs / 106.7);
 
             // If a giant jump happened (teleport/spawn), snap
             const maxSnapDist = (this.rs + this.ns) * 4 + 150;
@@ -2763,7 +2461,8 @@
             ctx.restore();
         }
         drawText(ctx) {
-            if (this.s < 20 || this.jagged) return;
+            // Only hide truly tiny dots; show names on small cells for readability.
+            if (this.s < 10 || this.jagged) return;
             const isMine = cells.mine.indexOf(this.id) !== -1;
             const isSplit = isMine && cells.mine.length > 1;
             if (!isMine && !settings.showOtherNames) return;
@@ -2792,17 +2491,13 @@
                     }
                 }
             }
-            const baseThreshold = Math.max(2000, maxMineSize * 0.95); // much higher threshold so tiny splits stay hidden
-            // Only let the very largest piece (or comparable) draw text while split
-            if (isSplit && maxMineSize && this.s < baseThreshold && this.s < maxMineSize * 0.98) return;
-            // Apply similar hide rule to other players: keep their largest (or near-largest) cell visible, hide tiny splits
-            if (!isMine && maxOtherSize) {
-                const otherThreshold = Math.max(1800, maxOtherSize * 0.6);
-                const isLargestOther = this.s >= maxOtherSize * 0.98;
-                if (!isLargestOther && this.s < otherThreshold) return;
-            }
-            if (settings.showMass && (isMine || !cells.mine.length) && !this.food/* && !this.ejected*/) {
-                let mass = (~~(this.s * this.s / 100)).toString();
+            // Only hide some of your own micro-splits to reduce clutter
+            if (isSplit && maxMineSize && this.s < Math.max(60, maxMineSize * 0.3)) return;
+            // Show other players' names on most cells; only hide their very smallest bits
+            if (!isMine && maxOtherSize && this.s < Math.max(60, maxOtherSize * 0.25) && this.s < maxOtherSize * 0.9) return;
+            const canShowMass = settings.showMass && !this.food/* && !this.ejected*/ && (isMine || settings.showOtherMass);
+            if (canShowMass) {
+                let mass = formatMassDisplay(this.s * this.s / 100);
                 if (this.name && settings.showNames) {
                     drawText(ctx, 0, this.x, this.y, this.nameSize, this.drawNameSize, this.name, isMine, this.nameColor);
                     let y = this.y + Math.max(this.s / 4.5, this.nameSize / 1.5);
@@ -2851,7 +2546,6 @@
         ctx.strokeStyle = "#000";
         if (ctx.lineWidth !== 1) ctx.strokeText(text, x, y);
         ctx.fillText(text, x, y);
-        ctx.restore();
     }
     function newNameCache(value, size, cacheKey, colorValue, outlineOn) {
         let canvas = document.createElement("canvas"),
@@ -2922,10 +2616,20 @@
         if (size > 500) {
             const outlineOn = settings.showTextOutline !== false;
             const colorValue = isMass ? "#FFF" : (nameColor || (isMine ? resolveNameColor() : "#FFF"));
-            return drawRaw(ctx, x, y, value, drawSize, colorValue, outlineOn);
+            drawRaw(ctx, x, y, value, drawSize, colorValue, outlineOn);
+            ctx.restore();
+            return;
         }
         ctx.imageSmoothingQuality = "high";
         if (isMass) {
+            // Short-mass format or non-digit characters: render raw text to avoid cache lookup issues
+            if (settings.shortMass || /[^0-9]/.test(value)) {
+                const outlineOn = settings.showTextOutline !== false;
+                const colorValue = "#FFF";
+                drawRaw(ctx, x, y, value, drawSize, colorValue, outlineOn);
+                ctx.restore();
+                return;
+            }
             let cache = getMassCache(size);
             cache.accessTime = syncAppStamp;
             let canvases = cache.canvases,
@@ -2972,11 +2676,18 @@
         let skinInput = document.getElementById('skin');
         let hatInput = document.getElementById('hatUrl');
         let nameColorInput = document.getElementById('nameColor');
+        let dualNickInput = document.getElementById('dualNick');
+        let dualSkinInput = document.getElementById('dualSkin');
         let skinPreview = document.getElementById('skinPreview');
 
-        function buildNamePayload() {
-            const nickVal = (nickInput && nickInput.value) ? nickInput.value.trim() : "";
-            const skinVal = (skinInput && skinInput.value) ? skinInput.value.trim() : "";
+        function buildNamePayload(useDualOverride) {
+            const useDual = !!useDualOverride || ((typeof dualInputActive === "function" ? dualInputActive() : false) && (activeInstance === secondaryInstance));
+            const nickVal = useDual
+                ? ((dualNickInput && dualNickInput.value) ? dualNickInput.value.trim() : (nickInput && nickInput.value ? nickInput.value.trim() : ""))
+                : ((nickInput && nickInput.value) ? nickInput.value.trim() : "");
+            const skinVal = useDual
+                ? ((dualSkinInput && dualSkinInput.value) ? dualSkinInput.value.trim() : (skinInput && skinInput.value ? skinInput.value.trim() : ""))
+                : ((skinInput && skinInput.value) ? skinInput.value.trim() : "");
             const hatVal = (hatInput && hatInput.value) ? hatInput.value.trim() : "";
             const colorVal = (nameColorInput && nameColorInput.value) ? nameColorInput.value.trim() : "";
             return formatNickSkinHat(nickVal, skinVal, hatVal, colorVal);
@@ -2994,8 +2705,6 @@
             const hatCode = buildHatCode(hatInput.value);
             if (hatCode) getHatImageFromCode(hatCode);
         }
-        const hatPreviewButton = document.getElementById('openHatPreview');
-        const hatPreviewUI = hatInput ? createHatPreviewUI(hatInput, prefetchHatFromInput, getSkinRawValue, hatPreviewButton) : null;
         function updateSkinPreview() {
             try {
                 if (!skinPreview) return;
@@ -3040,15 +2749,30 @@
                     const hatCode = buildHatCode(hatVal);
                     if (hatCode) getHatImageFromCode(hatCode);
                     sendSetNickSkin(buildNamePayload());
-                    hatPreviewUI && hatPreviewUI.refresh();
                 } catch (e) {}
             });
             hatInput.addEventListener('input', function() {
                 prefetchHatFromInput();
-                hatPreviewUI && hatPreviewUI.refresh();
             });
         }
-        hatPreviewUI && hatPreviewUI.refresh();
+        function persistDualInputs() {
+            try { localStorage.setItem('mo_dualNick', (dualNickInput && dualNickInput.value || "").trim()); } catch (e) {}
+            try { localStorage.setItem('mo_dualSkin', (dualSkinInput && dualSkinInput.value || "").trim()); } catch (e) {}
+            dualNeedsSync = true;
+            if (secondaryInstance && secondaryInstance.ws && secondaryInstance.ws.readyState === 1) {
+                try { sendSetNickSkinTo(secondaryInstance, buildNamePayload(true)); dualNeedsSync = false; } catch (e) {}
+            }
+        }
+        if (dualNickInput) {
+            try { dualNickInput.value = localStorage.getItem('mo_dualNick') || ""; } catch (e) {}
+            dualNickInput.addEventListener('blur', persistDualInputs);
+            dualNickInput.addEventListener('change', persistDualInputs);
+        }
+        if (dualSkinInput) {
+            try { dualSkinInput.value = localStorage.getItem('mo_dualSkin') || ""; } catch (e) {}
+            dualSkinInput.addEventListener('blur', persistDualInputs);
+            dualSkinInput.addEventListener('change', persistDualInputs);
+        }
         if (nameColorInput) {
             try { nameColorInput.value = localStorage.getItem('mo_nameColor') || ""; } catch (e) {}
             nameColorInput.addEventListener('blur', function() {
@@ -3071,7 +2795,6 @@
         if (skinInput) {
             skinInput.addEventListener('input', function() {
                 updateSkinPreview();
-                hatPreviewUI && hatPreviewUI.refresh();
             });
             skinInput.addEventListener('blur', function() {
                 try {
@@ -3079,7 +2802,6 @@
                     try { localStorage.setItem('mo_skin', skin); } catch (e) {}
                     sendSetNickSkin(buildNamePayload());
                     updateSkinPreview();
-                    hatPreviewUI && hatPreviewUI.refresh();
                 } catch (e) {}
             });
             // ensure preview on load if value already present
@@ -3088,13 +2810,11 @@
         if (nickInput) {
             nickInput.addEventListener('input', function() {
                 updateSkinPreview();
-                hatPreviewUI && hatPreviewUI.refresh();
             });
             nickInput.addEventListener('blur', function() {
                 try {
                     sendSetNickSkin(buildNamePayload());
                 } catch (e) {}
-                hatPreviewUI && hatPreviewUI.refresh();
             });
             nickInput.addEventListener('keydown', function(e) {
                 if (e.keyCode === 13) { // Enter: commit name change
@@ -3107,6 +2827,12 @@
         soundsVolume = document.getElementById("soundsVolume");
         mainCanvas.focus();
         function handleScroll(event) {
+            // Block zooming when UI overlays/menus are visible or user is typing
+            if (overlayShown || isTyping) {
+                event.preventDefault && event.preventDefault();
+                event.stopPropagation && event.stopPropagation();
+                return false;
+            }
             if (!dualInputActive()) return;
             const rawDelta = (event.wheelDelta / -120) || event.detail || 0;
             // amplify wheel input a bit but still cap extremes for touchpads
@@ -3116,15 +2842,21 @@
             const adjustedBase = 1 - (1 - base) * sensitivity;
             let newZ = zoomTarget;
             newZ *= Math.pow(adjustedBase, delta);
-            if (!settings.infiniteZoom && newZ < 1) newZ = 1;
             // Relax zoom ceiling when infiniteZoom is on
             const maxZoom = settings.infiniteZoom ? 1e6 : (4 / Math.max(newZ, 0.001));
             if (newZ > maxZoom) newZ = maxZoom;
-            if (settings.infiniteZoom && newZ < 0.005) newZ = 0.005;
+            const minZoom = 0.001;
+            if (newZ < minZoom) newZ = minZoom;
             zoomTarget = newZ;
         }
-            if (/firefox/i.test(navigator.userAgent)) document.addEventListener("DOMMouseScroll", handleScroll, 0);
-            else document.body.onmousewheel = handleScroll;
+            document.addEventListener('wheel', function(e){
+                if (overlayShown || isTyping) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+                handleScroll(e);
+            }, { passive: false });
             // Load user bindings (if any) and fall back to defaults.
             let __userBindings = {};
             function loadBindings() {
@@ -3162,10 +2894,6 @@
         let teleportDragging = false;
         let explodeSelecting = false;
         // OP-only player id lookup state lives in outer scope (idLookupSelecting)
-        let lineLockActive = false;
-        let lineLockDir = null;
-        let lineLockInterval = null;
-        const lineLockIndicator = document.getElementById('lineLockIndicator');
 
         // Minimal chat command guard: let server handle /mass; show warning if not OP but still send
         function handleChatCommand(msg) {
@@ -3181,8 +2909,26 @@
         }
 
         wHandle.onkeydown = function(event) {
-            if (!dualInputActive()) return;
+            if (typeof BIND_DEBUG !== 'undefined' && BIND_DEBUG) {
+                try { console.debug('onkeydown received', {kc: event.keyCode, origin: event.syntheticOrigin || null, t: Date.now()}); } catch (e) {}
+            }
+            try {
+                const record = typeof __bindStats !== 'undefined' && __bindStats;
+                if (record) {
+                    const rec = { type: 'keydown', kc: event.keyCode, origin: event.syntheticOrigin || 'native', t: Date.now() };
+                    __bindStats.inputs.push(rec);
+                    __bindStats._lastInput = rec;
+                }
+            } catch (e) {}
             const kc = event.keyCode;
+            // Allow ESC to toggle overlay even when dual input is inactive (multibox secondary).
+            if (kc === 27) {
+                if (pressed.esc) return;
+                overlayShown ? hideOverlay() : showOverlay();
+                pressed.esc = 1;
+                return;
+            }
+            if (!dualInputActive()) return;
             if (kc === 81 && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
                 if (!isTyping && !overlayShown) {
                     toggleActiveInstance();
@@ -3236,11 +2982,15 @@
             if (__B.lineLockToggle && kc === __B.lineLockToggle) {
                 if (isTyping || overlayShown) return;
                 if (lineLockActive) {
-                    if (lineLockInterval) { clearInterval(lineLockInterval); lineLockInterval = null; }
+                    clearLineLockInterval();
                     lineLockActive = false;
                     lineLockDir = null;
+                    if (activeInstance) {
+                        activeInstance.lineLockActive = false;
+                        activeInstance.lineLockDir = null;
+                    }
                     sendLinesplitLock(0, 0);
-                    if (lineLockIndicator) lineLockIndicator.style.display = 'none';
+                    updateLineLockIndicator();
                     return;
                 }
                 const cx = mainCanvas.width / 2;
@@ -3251,19 +3001,29 @@
                 const worldMouse = clientToWorld(mx, my);
                 const dirX = worldMouse.x - center.x;
                 const dirY = worldMouse.y - center.y;
-                const mag = Math.sqrt(dirX * dirX + dirY * dirY);
-                if (!mag) return;
-                const ndx = dirX / mag;
-                const ndy = dirY / mag;
+                const absX = Math.abs(dirX);
+                const absY = Math.abs(dirY);
+                // Choose a cardinal direction based on mouse quadrant: lock to pure axis to prevent spread.
+                let ndx = 0, ndy = 0;
+                if (absX === 0 && absY === 0) return;
+                if (absX >= absY) {
+                    ndx = dirX >= 0 ? 1 : -1;
+                    ndy = 0;
+                } else {
+                    ndx = 0;
+                    ndy = dirY >= 0 ? 1 : -1;
+                }
                 lineLockDir = { x: ndx, y: ndy };
+                if (activeInstance) {
+                    activeInstance.lineLockDir = lineLockDir;
+                }
                 sendLinesplitLock(ndx, ndy);
                 lineLockActive = true;
-                if (lineLockIndicator) lineLockIndicator.style.display = 'block';
-                if (lineLockInterval) { clearInterval(lineLockInterval); }
-                lineLockInterval = setInterval(function() {
-                    if (!lineLockDir || !lineLockActive) return;
-                    sendLinesplitLock(lineLockDir.x, lineLockDir.y);
-                }, 250);
+                if (activeInstance) {
+                    activeInstance.lineLockActive = true;
+                }
+                updateLineLockIndicator();
+                restartLineLockInterval();
                 return;
             }
 
@@ -3494,17 +3254,27 @@
                     wsSend(UINT8[43]);
                     pressed.n = 1;
                     break;
-                case 27: // Esc
-                    if (pressed.esc) break;
-                    overlayShown ? hideOverlay() : showOverlay();
-                    pressed.esc = 1;
-                    break;
             }
         };
 
         wHandle.onkeyup = function(event) {
-            if (!dualInputActive()) return;
+            if (typeof BIND_DEBUG !== 'undefined' && BIND_DEBUG) {
+                try { console.debug('onkeyup received', {kc: event.keyCode, origin: event.syntheticOrigin || null, t: Date.now()}); } catch (e) {}
+            }
+            try {
+                const record = typeof __bindStats !== 'undefined' && __bindStats;
+                if (record) {
+                    const rec = { type: 'keyup', kc: event.keyCode, origin: event.syntheticOrigin || 'native', t: Date.now() };
+                    __bindStats.inputs.push(rec);
+                    __bindStats._lastInput = rec;
+                }
+            } catch (e) {}
             const kc = event.keyCode;
+            if (kc === 27) {
+                pressed.esc = 0;
+                return;
+            }
+            if (!dualInputActive()) return;
             if (kc === __B.split) {
                 pressed.space = 0;
                 return;
@@ -3609,11 +3379,150 @@
             mouse.y = event.clientY;
         };
 
+        // Always allow Esc to toggle overlay, even when secondary instance is active.
+        document.addEventListener("keydown", function(e) {
+            if (e.keyCode !== 27) return;
+            if (pressed.esc) return;
+            if (overlayShown) {
+                hideOverlay();
+            } else {
+                // Force overlay on the primary instance even if secondary is active
+                try { setActiveClientState(primaryInstance); } catch (err) {}
+                showOverlay(true);
+            }
+            pressed.esc = 1;
+            e.preventDefault();
+        }, true);
+        document.addEventListener("keyup", function(e) {
+            if (e.keyCode !== 27) return;
+            pressed.esc = 0;
+        }, true);
+
+        // Capture bound key events early to emulate mouse instant activation.
+        // This intercepts bound keys in capture phase, prevents browser defaults,
+        // and forwards a synthetic event to the same handler used by mouse binds.
+        // Track active repeat intervals per key so keyboard holds mimic mouse holds
+        const __activeKeyIntervals = {};
+
+        document.addEventListener('keydown', function(e) {
+            try {
+                if (e.keyCode === 27) return; // let ESC handler above handle
+                if (!dualInputActive()) return;
+                if (isTyping || overlayShown) return;
+                const kc = e.keyCode;
+                const isBound = Object.values(__B || {}).some(v => v === kc);
+                if (!isBound) return;
+                e.preventDefault(); e.stopPropagation();
+                // Call original handler so UI state updates as usual
+                wHandle.onkeydown({
+                    keyCode: kc,
+                    shiftKey: !!e.shiftKey,
+                    ctrlKey: !!e.ctrlKey,
+                    altKey: !!e.altKey,
+                    metaKey: !!e.metaKey,
+                    syntheticOrigin: 'kbd-capture',
+                    preventDefault: function() {},
+                    stopPropagation: function() {}
+                });
+                // Force-send common action opcodes immediately to match mouse timing
+                try { sendImmediateForKey(kc); } catch (err) {}
+
+                // Start a repeat interval for this key (if mapped) so holding keys behaves like holding mouse
+                try {
+                    const actionNames = Object.keys(__B).filter(n => __B[n] === kc);
+                    if (actionNames && actionNames.length && !__activeKeyIntervals[kc]) {
+                        // Pick first action for repeat mapping
+                        const act = actionNames[0];
+                        // Configure repeat opcode and interval per action THIS CHANGES LIEK WHAT I WANTED IN SPLITS SO IT CAN HELP SOLOTRICKS AND BE LIKE MOUSE EBINDS
+                        const repeatConfig = (function(name){
+                            switch(name) {
+                                case 'eject': return { opcode: 21, interval: 30 };
+                                case 'split': return { opcode: 17, interval: 30 };
+                                case 'minionSplit': return { opcode: 22, interval: 60 };
+                                case 'minionEject': return { opcode: 23, interval: 60 };
+                                case 'minionFreeze': return { opcode: 24, interval: 120 };
+                                case 'minionCollect': return { opcode: 25, interval: 120 };
+                                case 'minionFollow': return { opcode: 19, interval: 120 };
+                                default: return null;
+                            }
+                        })(act);
+                        if (repeatConfig) {
+                            // Do NOT start a repeat interval for the dedicated single-split key.
+                            // Space (or whatever key is bound to `split`) should act as a one-shot split,
+                            // so avoid repeating even if user shortened the global split interval.
+                            if (act === 'split') {
+                                // split already had an immediate send above; do not start repeating
+                            } else {
+                                // send immediately already called; start repeating for hold behaviour
+                                __activeKeyIntervals[kc] = setInterval(function(){
+                                    try {
+                                        const last = (__bindStats.actions && __bindStats.actions.length) ? __bindStats.actions[__bindStats.actions.length-1] : null;
+                                        if (last && last.opcode === repeatConfig.opcode && (Date.now() - last.t) < 5) return;
+                                        if (UINT8 && UINT8[repeatConfig.opcode]) wsSend(UINT8[repeatConfig.opcode]);
+                                        else wsSend(new Uint8Array([repeatConfig.opcode]));
+                                    } catch (e) {}
+                                }, repeatConfig.interval);
+                            }
+                        }
+                    }
+                } catch (e) {}
+            } catch (err) {}
+        }, true);
+
+        document.addEventListener('keyup', function(e) {
+            try {
+                if (!dualInputActive()) return;
+                if (isTyping || overlayShown) return;
+                const kc = e.keyCode;
+                const isBound = Object.values(__B || {}).some(v => v === kc);
+                if (!isBound) return;
+                e.preventDefault(); e.stopPropagation();
+                wHandle.onkeyup({ keyCode: kc, syntheticOrigin: 'kbd-capture', preventDefault: function() {}, stopPropagation: function() {} });
+                // Clear any repeat interval started for this key
+                try { if (__activeKeyIntervals[kc]) { clearInterval(__activeKeyIntervals[kc]); delete __activeKeyIntervals[kc]; } } catch (e) {}
+            } catch (err) {}
+        }, true);
+
+        // Attempt to send immediate opcodes for certain bound keys so keyboard binds behave like mouse.
+        function sendImmediateForKey(kc) {
+            if (!ws || ws.readyState !== 1) return;
+            if (!__bindStats) return;
+            // map binding name -> opcode to send immediately
+            const map = {
+                split: 17,
+                eject: 21,
+                minionSplit: 22,
+                minionEject: 23,
+                minionFreeze: 24,
+                minionCollect: 25,
+                minionFollow: 19
+            };
+            let targetOpcode = null;
+            for (let name in __B) {
+                if (__B[name] === kc && map[name]) {
+                    targetOpcode = map[name];
+                    break;
+                }
+            }
+            if (!targetOpcode) return;
+            // Avoid duplicate sends: if last action has same opcode within 30ms, skip.
+            const last = (__bindStats.actions && __bindStats.actions.length) ? __bindStats.actions[__bindStats.actions.length - 1] : null;
+            if (last && last.opcode === targetOpcode && (Date.now() - last.t) < 30) return;
+            // send a single-byte opcode via wsSend; UINT8 table indexes are numbers (we store Uint8Array)
+            try {
+                if (UINT8 && UINT8[targetOpcode]) wsSend(UINT8[targetOpcode]);
+                else wsSend(new Uint8Array([targetOpcode]));
+            } catch (e) {}
+        }
+
         // Convert client coords to world coords
         function clientToWorld(cx, cy) {
+            const rs = mainCanvas && mainCanvas.clientWidth ? (mainCanvas.width / mainCanvas.clientWidth) : 1;
+            const ix = cx * rs;
+            const iy = cy * rs;
             return {
-                x: (cx - mainCanvas.width / 2) / camera.z + camera.x,
-                y: (cy - mainCanvas.height / 2) / camera.z + camera.y
+                x: (ix - mainCanvas.width / 2) / camera.z + camera.x,
+                y: (iy - mainCanvas.height / 2) / camera.z + camera.y
             };
         }
         function findTopCellAt(worldX, worldY) {
@@ -3697,6 +3606,26 @@
                 console.debug && console.debug("Sent setNickSkin:", text);
             } catch (e) { console.error("sendSetNickSkin error:", e); }
         }
+        function sendSetNickSkinTo(state, text) {
+            if (!state || !state.ws || state.ws.readyState !== 1) return;
+            try {
+                let writer = new Writer(1);
+                writer.setUint8(46);
+                writer.setStringUTF8(text || "");
+                state.ws.send(writer.build());
+                console.debug && console.debug("Sent setNickSkin (targeted):", text);
+            } catch (e) { console.error("sendSetNickSkinTo error:", e); }
+        }
+        function sendPlayTo(state, payload) {
+            if (!state || !state.ws || state.ws.readyState !== 1) return;
+            try {
+                let writer = new Writer(1);
+                writer.setUint8(0x00);
+                writer.setStringUTF8(payload || "");
+                state.ws.send(writer.build());
+                console.debug && console.debug("Sent play (targeted):", payload);
+            } catch (e) { console.error("sendPlayTo error:", e); }
+        }
 
         // Send linesplit lock packet (opcode 60) with a direction vector; zero vector clears the lock
         function sendLinesplitLock(dirX, dirY) {
@@ -3758,16 +3687,25 @@
             sendLinesplitBurst(dirX, dirY, 3);
             sendLinesplitLock(dirX, dirY);
             // keep indicator visible briefly
-            if (lineLockIndicator) {
-                lineLockIndicator.style.display = 'block';
-                setTimeout(() => { lineLockIndicator.style.display = 'none'; }, 500);
+            lineLockActive = true;
+            lineLockDir = { x: dirX, y: dirY };
+            if (activeInstance) {
+                activeInstance.lineLockActive = true;
+                activeInstance.lineLockDir = lineLockDir;
             }
+            updateLineLockIndicator();
+            setTimeout(() => { if (!lineLockActive) return; updateLineLockIndicator(); }, 0);
             // Auto-unlock after a short delay so the line stays straight while the burst completes
             setTimeout(() => {
                 sendLinesplitLock(0, 0);
+                clearLineLockInterval();
                 lineLockActive = false;
                 lineLockDir = null;
-                if (lineLockIndicator) lineLockIndicator.style.display = 'none';
+                if (activeInstance) {
+                    activeInstance.lineLockActive = false;
+                    activeInstance.lineLockDir = null;
+                }
+                updateLineLockIndicator();
             }, 250);
         }
 
@@ -3816,6 +3754,7 @@
                 event.stopPropagation();
                 wHandle.onkeydown({
                     keyCode: mcode,
+                    syntheticOrigin: 'mouse',
                     shiftKey: event.shiftKey,
                     ctrlKey: event.ctrlKey,
                     altKey: event.altKey,
@@ -3860,6 +3799,7 @@
                 event.stopPropagation();
                 wHandle.onkeyup({
                     keyCode: mcode,
+                    syntheticOrigin: 'mouse',
                     shiftKey: event.shiftKey,
                     ctrlKey: event.ctrlKey,
                     altKey: event.altKey,
@@ -3880,18 +3820,28 @@
             if (frozenMouseUntil && Date.now() < frozenMouseUntil && frozenMousePos) {
                 sendMouseMove(frozenMousePos.x, frozenMousePos.y);
             } else {
-                sendMouseMove((mouse.x - mainCanvas.width / 2) / camera.z + camera.x, (mouse.y - mainCanvas.height / 2) / camera.z + camera.y);
+                const rs = mainCanvas && mainCanvas.clientWidth ? (mainCanvas.width / mainCanvas.clientWidth) : 1;
+                sendMouseMove((mouse.x * rs - mainCanvas.width / 2) / camera.z + camera.x, (mouse.y * rs - mainCanvas.height / 2) / camera.z + camera.y);
                 frozenMousePos = null;
                 frozenMouseUntil = 0;
             }
         }, 60);
         wHandle.onresize = function() {
-            let cW = mainCanvas.width = wHandle.innerWidth,
-                cH = mainCanvas.height = wHandle.innerHeight;
-            const viewMult = Math.sqrt(Math.min(cH / 1080, cW / 1920));
-            camera.viewMult = viewMult;
-            applyViewMultToState(primaryInstance, viewMult);
-            applyViewMultToState(secondaryInstance, viewMult);
+            const scale = getRenderScale();
+            const displayW = wHandle.innerWidth;
+            const displayH = wHandle.innerHeight;
+            // Only reduce canvas buffer size; keep CSS size unchanged so HUD/UI stay consistent
+            mainCanvas.width = Math.max(1, Math.floor(displayW * scale));
+            mainCanvas.height = Math.max(1, Math.floor(displayH * scale));
+            mainCanvas.style.width = displayW + "px";
+            mainCanvas.style.height = displayH + "px";
+            // Keep UI scale stable: baseline on display size (do not widen view when render scale drops)
+            if (!settings.lockViewMult) {
+                const viewMult = Math.sqrt(Math.min(displayH / 1080, displayW / 1920));
+                camera.viewMult = viewMult;
+                applyViewMultToState(primaryInstance, viewMult);
+                applyViewMultToState(secondaryInstance, viewMult);
+            }
         };
         wHandle.onresize();
         log.info(`Init completed in ${Date.now() - DATE}ms`);
@@ -3902,12 +3852,29 @@
             let div = /ip=([\w\W]+):([0-9]+)/.exec(wHandle.location.search.slice(1));
             if (div) wsTarget = `${div[1]}:${div[2]}`;
         }
-        wsInit(wsTarget, primaryInstance);
+        if (wsTarget) wsInit(wsTarget, primaryInstance);
         window.requestAnimationFrame(drawGame);
     }
     wHandle.setServer = function(arg) {
-        if (WS_URL === arg) return;
+        console.info("[client] setServer called with", arg, " (previous:", WS_URL, ")");
+        // Always reconnect when user selects a server, even if the value matches WS_URL.
+        wsCleanup();
         wsInit(arg, primaryInstance);
+        // Keep secondary in sync: next toggle will connect to the same target and force a fresh socket
+        if (secondaryInstance) {
+            secondaryInstance.WS_URL = resolveWsUrl(arg);
+            if (secondaryInstance.ws) {
+                try { secondaryInstance.ws.close(); } catch (e) {}
+                secondaryInstance.ws = null;
+            }
+            // Drop secondary state so we don't render dual highlights on the new server
+            secondaryInstance = null;
+        }
+        secondaryPendingPlay = false;
+        dualNeedsSync = false;
+        try { wHandle.__dualInputEnabled = true; } catch (e) {}
+        setActiveClientState(primaryInstance);
+        resetVisibilityCaches(primaryInstance);
     };
     wHandle.formatNickSkinHat = formatNickSkinHat;
     wHandle.setSkins = function(arg) {
@@ -3928,7 +3895,11 @@
     };
     wHandle.setChatHide = function(arg) {
         settings.hideChat = arg;
-        settings.hideChat ? wjQuery('#chat_textbox').hide() : wjQuery('#chat_textbox').show();
+        if (settings.hideChat) {
+            wjQuery('#chatbox-container').hide();
+        } else {
+            wjQuery('#chatbox-container').show();
+        }
     };
     wHandle.setMinimap = function(arg) {
         settings.showMinimap = !arg;
@@ -3944,6 +3915,10 @@
     };
     wHandle.setShowMass = function(arg) {
         settings.showMass = arg;
+    };
+    wHandle.setShowOtherMass = function(arg) {
+        settings.showOtherMass = arg;
+        try { wHandle.localStorage.setItem("checkbox-24", arg); } catch (e) {}
     };
     wHandle.setDarkTheme = function(arg) {
         settings.darkTheme = arg;
@@ -3982,8 +3957,13 @@
         if (!arg) autoRespawnArmed = false;
         try { wHandle.localStorage.setItem("checkbox-22", arg); } catch (e) {}
     };
+    wHandle.setShortMass = function(showFullNumbers) {
+        // Checkbox-23: when checked, use long numbers (disable short format)
+        settings.shortMass = !showFullNumbers;
+        try { wHandle.localStorage.setItem("checkbox-23", showFullNumbers); } catch (e) {}
+    };
     wHandle.setDrawDelay = function(ms) {
-        const value = clampNumber(ms, 0, 400);
+        const value = clampNumber(ms, 0, 1);
         settings.drawDelayMs = value;
         try { wHandle.localStorage.setItem("mo_drawDelay", value); } catch (e) {}
     };
@@ -4001,6 +3981,13 @@
         const value = clampNumber(val, 10, 400);
         settings.scrollZoomRate = value;
         try { wHandle.localStorage.setItem("mo_scrollZoomRate", value); } catch (e) {}
+    };
+    wHandle.setRenderScale = function(val) {
+        const value = clampNumber(val, 0.3, 1.5);
+        settings.renderScale = value;
+        try { wHandle.localStorage.setItem("mo_renderScale", value); } catch (e) {}
+        // Re-apply canvas sizing immediately when the user changes it
+        if (typeof wHandle.onresize === "function") wHandle.onresize();
     };
     wHandle.spectate = function() {
         wsSend(UINT8[1]);
